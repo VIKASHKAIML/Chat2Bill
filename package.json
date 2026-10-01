@@ -1,0 +1,21 @@
+{
+  "name": "voice-billing-app",
+  "version": "1.0.0",
+  "description": "A responsive voice-based billing web application for retail and grocery stores using Web Speech API and Express.js.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "keywords": [
+    "voice-billing",
+    "web-speech-api",
+    "express",
+    "retail-pos"
+  ],
+  "author": "Voice Billing Team",
+  "license": "MIT"
+}

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Voice Billing Web Application for retail and grocery businesses.">
+  <title>Voice Billing System</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand-group">
+        <div class="brand-logo" aria-hidden="true">₹</div>
+        <div>
+          <h1>Voice Billing System</h1>
+          <p class="brand-subtitle">Smart Retail Pos &amp; Voice Order Entry</p>
+        </div>
+      </div>
+      <div class="system-status" id="systemStatusBadge" aria-live="polite">
+        <span class="status-indicator"></span> System Ready
+      </div>
+    </div>
+  </header>
+
+  <main class="main-wrapper">
+    <div class="dashboard-grid">
+      
+      <!-- LEFT PANEL: VOICE RECOGNITION -->
+      <section class="card voice-panel" aria-labelledby="voice-panel-heading">
+        <div class="panel-header">
+          <h2 id="voice-panel-heading">Speak your items</h2>
+          <span class="badge" id="languageBadge">Language: हिन्दी (hi-IN)</span>
+        </div>
+        <p class="panel-desc">
+          Tell me what the customer bought. Example: <em>&ldquo;2 Maggi 15 each, 3 Pepsi 40 each&rdquo;</em>
+        </p>
+
+        <!-- Mic Button Area -->
+        <div class="mic-container">
+          <button 
+            type="button" 
+            id="micButton" 
+            class="mic-btn" 
+            aria-label="Start voice input"
+            title="Click to speak items">
+            <svg class="mic-icon" viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              <line x1="12" y1="19" x2="12" y2="22"></line>
+              <line x1="8" y1="22" x2="16" y2="22"></line>
+            </svg>
+          </button>
+          <p class="mic-status-text" id="micStatusText" aria-live="polite">Ready. Tap the microphone.</p>
+        </div>
+
+        <!-- Transcript input -->
+        <div class="transcript-group">
+          <div class="transcript-header-flex">
+            <label for="transcriptInput" class="form-label">Transcript (you can edit it)</label>
+            <button type="button" id="toggleLangButton" class="link-btn" title="Toggle language">Switch to English</button>
+          </div>
+          <textarea 
+            id="transcriptInput" 
+            class="transcript-box" 
+            rows="4" 
+            placeholder="Your spoken words appear here... You can edit directly before adding to bill."></textarea>
+        </div>
+
+        <!-- Voice actions -->
+        <div class="voice-actions">
+          <button type="button" id="addToBillButton" class="btn btn-primary">Add to bill</button>
+          <button type="button" id="stopButton" class="btn btn-secondary">Stop</button>
+          <button type="button" id="clearTextButton" class="btn btn-secondary">Clear text</button>
+        </div>
+
+        <p class="helper-text">
+          <span aria-hidden="true">ℹ</span> Basic parser (no AI): please verify every item before billing.
+        </p>
+      </section>
+
+      <!-- RIGHT PANEL: CURRENT BILL -->
+      <section class="card bill-panel" aria-labelledby="bill-panel-heading">
+        <div class="panel-header">
+          <h2 id="bill-panel-heading">Current bill</h2>
+          <button type="button" id="addItemButton" class="btn btn-outline" aria-label="Add a blank row to the bill">+ Add item</button>
+        </div>
+
+        <!-- Table container with horizontal scroll handling -->
+        <div class="table-responsive" tabindex="0" aria-label="Current bill items table">
+          <table class="bill-table" id="billTable">
+            <thead>
+              <tr>
+                <th scope="col" style="min-width: 140px;">Item</th>
+                <th scope="col" style="min-width: 110px;">Qty</th>
+                <th scope="col" style="min-width: 90px;">Price ₹</th>
+                <th scope="col" style="min-width: 75px;">Disc %</th>
+                <th scope="col" style="min-width: 75px;">Tax %</th>
+                <th scope="col" style="min-width: 95px;">Amount</th>
+                <th scope="col" style="min-width: 70px;">Action</th>
+              </tr>
+            </thead>
+            <tbody id="billItemsBody">
+              <!-- Rendered dynamically -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Bill settings (Discount, Default Tax) -->
+        <div class="bill-settings-grid">
+          <div class="form-control-inline">
+            <label for="billDiscount">Bill discount (%):</label>
+            <input type="number" id="billDiscount" min="0" max="100" step="0.5" value="0">
+          </div>
+          <div class="form-control-inline">
+            <label for="defaultTax">Default tax (%):</label>
+            <input type="number" id="defaultTax" min="0" max="100" step="0.5" value="0">
+          </div>
+        </div>
+
+        <!-- Summary box -->
+        <div class="bill-summary">
+          <div class="summary-line">
+            <span>Subtotal</span>
+            <span id="summarySubtotal">₹0.00</span>
+          </div>
+          <div class="summary-line">
+            <span>Discount</span>
+            <span id="summaryDiscount" class="text-danger">-₹0.00</span>
+          </div>
+          <div class="summary-line">
+            <span>Taxable amount</span>
+            <span id="summaryTaxable">₹0.00</span>
+          </div>
+          <div class="summary-line">
+            <span>Tax</span>
+            <span id="summaryTax">₹0.00</span>
+          </div>
+          <div class="summary-line summary-grand-total">
+            <span>Grand total</span>
+            <span id="summaryGrandTotal">₹0.00</span>
+          </div>
+        </div>
+
+        <!-- Bill Action Controls -->
+        <div class="bill-actions">
+          <button type="button" id="generateBillButton" class="btn btn-primary btn-large">Generate bill</button>
+          <button type="button" id="clearBillButton" class="btn btn-danger-outline">Clear bill</button>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- GENERATED INVOICE MODAL -->
+  <div class="modal-overlay" id="invoiceModal" role="dialog" aria-modal="true" aria-labelledby="modalInvoiceTitle" hidden>
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modalInvoiceTitle">Bill Generated Successfully</h3>
+        <button type="button" id="closeModalBtn" class="close-modal" aria-label="Close invoice popup">&times;</button>
+      </div>
+      <div class="modal-body" id="invoiceReceiptContent">
+        <!-- Rendered invoice receipt -->
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" onclick="window.print()">Print Invoice</button>
+        <button type="button" class="btn btn-secondary" id="modalDismissBtn">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
