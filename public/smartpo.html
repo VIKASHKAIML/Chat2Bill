@@ -1,0 +1,2372 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartPO Studio - Multi-Image AI & Heuristic Purchase Order Extractor</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Tesseract.js: Built-in In-Browser Offline OCR Engine (Zero Setup & Free) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: rgba(241, 245, 249, 0.5);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+
+    .custom-shadow {
+      box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.06), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+    }
+
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+
+      #printArea,
+      #printArea * {
+        visibility: visible;
+      }
+
+      #printArea {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        border: none !important;
+        box-shadow: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col font-sans">
+
+  <!-- Unified Application Navigation Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm backdrop-blur-md bg-white/95">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3 sm:space-x-4">
+        <div
+          class="h-10 w-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20 shrink-0">
+          <i data-lucide="file-spreadsheet" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold text-slate-900 tracking-tight">SmartPO Studio</h1>
+            <span id="headerEngineBadge"
+              class="px-2 py-0.5 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span class="hidden sm:inline">Multi-File Engine Ready</span>
+              <span class="sm:hidden">Ready</span>
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 hidden md:block">Intelligent Multi-Image PO OCR, Batch Auditing & Dual-Engine
+            Extraction</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs & Actions -->
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <!-- Switch to Voice Billing POS -->
+        <a href="/"
+          class="px-3 py-1.5 text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition-all flex items-center gap-1.5 shadow-xs"
+          title="Switch to Live Voice Billing System">
+          <i data-lucide="mic" class="w-4 h-4 text-emerald-600"></i>
+          <span>Voice POS</span>
+          <span class="hidden md:inline text-[10px] bg-emerald-200 text-emerald-800 px-1.5 py-0.2 rounded font-mono">LIVE</span>
+        </a>
+
+        <button id="openApiSettingsBtn"
+          class="px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1.5 border border-slate-200">
+          <i data-lucide="key" class="w-4 h-4 text-amber-500"></i>
+          <span class="hidden sm:inline">API Config</span>
+        </button>
+
+        <button id="toggleHistoryBtn"
+          class="px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors flex items-center gap-1.5 border border-slate-200">
+          <i data-lucide="history" class="w-4 h-4 text-slate-500"></i>
+          <span>History (<span id="historyCountBadge">0</span>)</span>
+        </button>
+
+        <button id="quickSampleBtn"
+          class="px-3.5 py-1.5 text-xs sm:text-sm font-semibold bg-brand-50 hover:bg-brand-100 text-brand-700 border border-brand-200 rounded-lg transition-colors flex items-center gap-1.5">
+          <i data-lucide="sparkles" class="w-4 h-4 text-brand-600"></i>
+          <span class="hidden sm:inline">Sample PO</span>
+          <span class="sm:hidden">Sample</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+      <!-- LEFT PANEL: Multi-Image Source Input -->
+      <section class="lg:col-span-5 flex flex-col gap-4">
+
+        <div class="bg-white rounded-2xl border border-slate-200 custom-shadow p-5 flex flex-col gap-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span
+                class="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-700 font-semibold text-xs">1</span>
+              <h2 class="font-semibold text-slate-900 text-sm uppercase tracking-wider">PO Sources & Upload</h2>
+            </div>
+            <div class="relative">
+              <select id="presetSelector"
+                class="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer">
+                <option value="">⚡ Switch Samples...</option>
+                <option value="tech">1. Enterprise Hardware PO</option>
+                <option value="office">2. Office Facilities & Supply PO</option>
+                <option value="consulting">3. Cloud Engineering SOW</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Multi-file Drag & Drop Area -->
+          <div id="dropZone"
+            class="border-2 border-dashed border-slate-200 hover:border-brand-500 hover:bg-brand-50/20 rounded-xl p-5 text-center transition-all cursor-pointer relative group">
+            <input type="file" id="fileInput" accept="image/*,text/plain" multiple
+              class="absolute inset-0 opacity-0 cursor-pointer" />
+            <div class="flex flex-col items-center justify-center gap-2 pointer-events-none">
+              <div
+                class="w-11 h-11 rounded-xl bg-slate-100 group-hover:bg-brand-100 group-hover:text-brand-600 text-slate-500 flex items-center justify-center transition-colors">
+                <i data-lucide="upload-cloud" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-slate-800">Click to upload or drag & drop</p>
+                <p class="text-xs text-slate-500">Upload single or multiple images (.png, .jpg) or text (.txt)</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Multi-File Previews Badge & Thumbnails Section -->
+          <div id="fileQueueContainer" class="hidden flex flex-col gap-2">
+            <div class="flex items-center justify-between text-xs text-slate-500 font-medium">
+              <span class="flex items-center gap-1.5"><i data-lucide="layers" class="w-3.5 h-3.5 text-brand-600"></i>
+                Queued Files (<span id="queueCount">0</span>)</span>
+              <button id="clearQueueBtn" class="text-red-500 hover:underline">Remove All</button>
+            </div>
+            <div id="thumbnailsList"
+              class="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-1 bg-slate-50 border border-slate-200 rounded-xl">
+            </div>
+          </div>
+
+          <!-- PO Document Text / Context -->
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center justify-between text-xs text-slate-500 font-medium">
+              <span class="flex items-center gap-1.5"><i data-lucide="file-text" class="w-3.5 h-3.5"></i> Aggregated
+                Text / Document OCR Data</span>
+              <button id="clearInputBtn" class="text-slate-400 hover:text-red-500 transition-colors">Clear</button>
+            </div>
+
+            <textarea id="rawTextEditor" rows="7"
+              class="w-full text-xs font-mono bg-slate-50 border border-slate-200 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:bg-white text-slate-800 transition-all resize-y placeholder:text-slate-400 leading-relaxed"
+              placeholder="Paste purchase order invoice text, receipt, quote, or procurement email here..."></textarea>
+          </div>
+
+          <!-- Extraction Method selector & Buttons -->
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-medium text-slate-600">Preferred Parser:</span>
+              <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
+                <label class="inline-flex items-center gap-1 cursor-pointer">
+                  <input type="radio" name="parserMode" value="auto" checked
+                    class="text-brand-600 focus:ring-brand-500">
+                  <span class="text-slate-700">Auto (Multi-Image AI)</span>
+                </label>
+                <label class="inline-flex items-center gap-1 cursor-pointer">
+                  <input type="radio" name="parserMode" value="ocr" class="text-brand-600 focus:ring-brand-500">
+                  <span class="text-slate-700">OCR Engine</span>
+                </label>
+                <label class="inline-flex items-center gap-1 cursor-pointer">
+                  <input type="radio" name="parserMode" value="local" class="text-brand-600 focus:ring-brand-500">
+                  <span class="text-slate-700">Local Only</span>
+                </label>
+              </div>
+            </div>
+
+            <button id="extractBtn"
+              class="w-full py-3 px-4 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold rounded-xl shadow-md shadow-brand-500/25 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed group">
+              <i data-lucide="sparkle" class="w-4 h-4 text-brand-200 group-hover:rotate-12 transition-transform"></i>
+              <span id="extractBtnText">Extract PO Data</span>
+              <span id="extractSpinner"
+                class="hidden animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full ml-1"></span>
+            </button>
+          </div>
+        </div>
+
+        <div id="metaPanel" class="bg-white rounded-2xl border border-slate-200 custom-shadow p-5 flex flex-col gap-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Engine & Batch Status</span>
+            <span id="confidenceTag"
+              class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+              <i data-lucide="cpu" class="w-3.5 h-3.5"></i>
+              <span>Ready for Processing</span>
+            </span>
+          </div>
+
+          <div
+            class="flex items-center gap-2 text-xs text-slate-700 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+            <span class="font-semibold text-slate-500">Current Parser:</span>
+            <span id="activeEngineText" class="font-medium text-brand-700">Gemini Flash (Multi-Input AI)</span>
+          </div>
+
+          <p id="extractionNotes"
+            class="text-xs text-slate-600 italic bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+            Select a sample above or drop multiple purchase order files to aggregate line items and extract unified PO
+            records.
+          </p>
+        </div>
+
+      </section>
+
+      <!-- RIGHT PANEL: Editable PO Workbench Card -->
+      <section class="lg:col-span-7 flex flex-col gap-4">
+
+        <div id="printArea"
+          class="bg-white rounded-2xl border border-slate-200 custom-shadow p-5 sm:p-6 flex flex-col gap-6">
+
+          <!-- Top Row: PO Core Status & Actions -->
+          <div class="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div class="flex items-center gap-2">
+              <span
+                class="flex h-6 w-6 items-center justify-center rounded-full bg-brand-100 text-brand-700 font-semibold text-xs">2</span>
+              <h2 class="font-bold text-slate-900 text-base">Extracted Purchase Order</h2>
+              <span id="poStatusBadge"
+                class="ml-2 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                Draft / Ready
+              </span>
+            </div>
+
+            <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+              <!-- Send to Voice POS button -->
+              <button id="transferToVoicePosBtn" title="Send Extracted Items to Voice Billing POS"
+                class="px-2.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+                <i data-lucide="arrow-right-circle" class="w-3.5 h-3.5 text-emerald-200"></i>
+                <span class="font-medium">Send to Voice POS</span>
+              </button>
+
+              <button id="clearExtractedPoBtn" title="Clear Extracted PO Data"
+                class="p-2 text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-lg border border-slate-200 hover:border-red-200 transition-colors text-xs font-medium flex items-center gap-1.5">
+                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-slate-500"></i>
+                <span class="hidden sm:inline">Clear</span>
+              </button>
+              <button id="printPoBtn" title="Print PO"
+                class="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors text-xs font-medium flex items-center gap-1.5">
+                <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Print</span>
+              </button>
+              <button id="exportCsvBtn" title="Export as CSV"
+                class="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors text-xs font-medium flex items-center gap-1.5">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">CSV</span>
+              </button>
+              <button id="exportJsonBtn" title="Export as JSON"
+                class="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors text-xs font-medium flex items-center gap-1.5">
+                <i data-lucide="code" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">JSON</span>
+              </button>
+              <button id="savePoBtn"
+                class="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg transition-colors text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+                <i data-lucide="check-circle" class="w-3.5 h-3.5 text-emerald-400"></i>
+                <span>Approve & Save</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- PO Meta Fields -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-500 uppercase">PO Number</label>
+              <input type="text" id="fieldPoNumber"
+                class="mt-1 w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                value="PO-2026-9021" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-500 uppercase">Issue Date</label>
+              <input type="date" id="fieldIssueDate"
+                class="mt-1 w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                value="2026-09-24" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-500 uppercase">Delivery / Due</label>
+              <input type="date" id="fieldDueDate"
+                class="mt-1 w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                value="2026-10-15" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-500 uppercase">Payment Terms</label>
+              <input type="text" id="fieldTerms"
+                class="mt-1 w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                value="Net 30 days" />
+            </div>
+          </div>
+
+          <!-- Vendor vs Buyer Information Grid -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div
+              class="p-3.5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-colors flex flex-col gap-2">
+              <div class="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider">
+                <i data-lucide="store" class="w-3.5 h-3.5 text-brand-600"></i> Vendor / Supplier
+              </div>
+              <div>
+                <input type="text" id="vendorName" placeholder="Vendor Company Name"
+                  class="w-full font-semibold text-xs text-slate-900 border-b border-slate-200 pb-1 focus:outline-none focus:border-brand-500"
+                  value="Quantum Cloud Components Inc." />
+              </div>
+              <textarea id="vendorAddress" rows="2" placeholder="Vendor Address..."
+                class="w-full text-xs text-slate-600 focus:outline-none border-b border-transparent hover:border-slate-200 resize-none">1200 Silicon Avenue, Bldg B, Austin, TX 78701</textarea>
+              <div class="flex gap-2">
+                <input type="text" id="vendorContact" placeholder="Contact Email / Phone"
+                  class="w-1/2 text-xs text-slate-600 border-b border-slate-200 pb-1 focus:outline-none"
+                  value="sales@quantumcloud.com" />
+                <input type="text" id="vendorTaxId" placeholder="Tax / VAT ID"
+                  class="w-1/2 text-xs text-slate-600 border-b border-slate-200 pb-1 focus:outline-none"
+                  value="TX-449102-A" />
+              </div>
+            </div>
+
+            <div
+              class="p-3.5 rounded-xl border border-slate-200 bg-white hover:border-slate-300 transition-colors flex flex-col gap-2">
+              <div class="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider">
+                <i data-lucide="building" class="w-3.5 h-3.5 text-indigo-600"></i> Buyer / Bill To
+              </div>
+              <div>
+                <input type="text" id="buyerName" placeholder="Buyer Company Name"
+                  class="w-full font-semibold text-xs text-slate-900 border-b border-slate-200 pb-1 focus:outline-none focus:border-brand-500"
+                  value="Acrobyte Systems Corp" />
+              </div>
+              <textarea id="buyerAddress" rows="2" placeholder="Buyer Address..."
+                class="w-full text-xs text-slate-600 focus:outline-none border-b border-transparent hover:border-slate-200 resize-none">500 Tech Parkway, Suite 300, San Jose, CA 95110</textarea>
+              <div class="flex gap-2">
+                <input type="text" id="buyerContact" placeholder="Contact Person / Email"
+                  class="w-1/2 text-xs text-slate-600 border-b border-slate-200 pb-1 focus:outline-none"
+                  value="procurement@acrobyte.io" />
+                <input type="text" id="buyerTaxId" placeholder="Tax / VAT ID"
+                  class="w-1/2 text-xs text-slate-600 border-b border-slate-200 pb-1 focus:outline-none"
+                  value="US-88291039" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Line Items Table Section -->
+          <div class="flex flex-col gap-2">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Line Items Table</h3>
+                <span id="lineItemCount"
+                  class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">4 items</span>
+              </div>
+              <button id="addRowBtn"
+                class="text-xs font-medium text-brand-600 hover:text-brand-700 hover:bg-brand-50 px-2.5 py-1 rounded-lg border border-brand-200 flex items-center gap-1 transition-colors">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Row
+              </button>
+            </div>
+
+            <div class="border border-slate-200 rounded-xl overflow-x-auto bg-white shadow-sm">
+              <table class="w-full text-left text-xs">
+                <thead
+                  class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 uppercase tracking-wider text-[11px]">
+                  <tr>
+                    <th class="py-2.5 px-3 min-w-[180px]">Item & Description</th>
+                    <th class="py-2.5 px-3 min-w-[100px]">SKU / Code</th>
+                    <th class="py-2.5 px-2 w-16 text-right">Qty</th>
+                    <th class="py-2.5 px-3 w-28 text-right">Unit Price</th>
+                    <th class="py-2.5 px-2 w-20 text-right">Tax %</th>
+                    <th class="py-2.5 px-3 w-28 text-right">Total</th>
+                    <th class="py-2.5 px-2 w-10 text-center"></th>
+                  </tr>
+                </thead>
+                <tbody id="lineItemsBody" class="divide-y divide-slate-100"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Totals Section -->
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-end pt-2">
+            <div class="sm:col-span-6 flex flex-col gap-2">
+              <div class="flex items-center gap-2">
+                <label class="text-xs font-semibold text-slate-500 uppercase">Currency:</label>
+                <select id="currencySelect"
+                  class="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 focus:ring-1 focus:ring-brand-500 focus:outline-none">
+                  <option value="₹" data-code="INR">INR (₹)</option>
+                  <option value="$" data-code="USD" selected>USD ($)</option>
+                  <option value="€" data-code="EUR">EUR (€)</option>
+                  <option value="£" data-code="GBP">GBP (£)</option>
+                  <option value="¥" data-code="JPY">JPY (¥)</option>
+                  <option value="C$" data-code="CAD">CAD (C$)</option>
+                </select>
+              </div>
+              <p class="text-[11px] text-slate-400">Total recalculates instantly upon changes.</p>
+            </div>
+
+            <div class="sm:col-span-6 bg-slate-50 border border-slate-200 rounded-xl p-3.5 flex flex-col gap-2">
+              <div class="flex justify-between text-xs text-slate-600">
+                <span>Subtotal</span>
+                <span id="subtotalVal" class="font-mono font-medium">$0.00</span>
+              </div>
+              <div class="flex justify-between items-center text-xs text-slate-600">
+                <span class="flex items-center gap-1">Shipping & Handling</span>
+                <div class="flex items-center gap-1">
+                  <span class="text-slate-400 currency-symbol-label">$</span>
+                  <input type="number" id="shippingInput" step="0.01" min="0"
+                    class="w-20 text-right bg-white border border-slate-200 rounded px-1.5 py-0.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    value="120.00" />
+                </div>
+              </div>
+              <div class="flex justify-between items-center text-xs text-slate-600">
+                <span class="flex items-center gap-1">Discount</span>
+                <div class="flex items-center gap-1">
+                  <span class="text-slate-400">- <span class="currency-symbol-label">$</span></span>
+                  <input type="number" id="discountInput" step="0.01" min="0"
+                    class="w-20 text-right bg-white border border-slate-200 rounded px-1.5 py-0.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    value="150.00" />
+                </div>
+              </div>
+              <div class="flex justify-between text-xs text-slate-600">
+                <span>Total Tax</span>
+                <span id="taxTotalVal" class="font-mono font-medium">$0.00</span>
+              </div>
+              <div class="pt-2 border-t border-slate-200 flex justify-between items-baseline">
+                <span class="text-xs font-bold text-slate-900 uppercase">Grand Total</span>
+                <span id="grandTotalVal" class="text-base font-bold font-mono text-brand-700">$0.00</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+    </div>
+  </main>
+
+  <!-- Configuration Modal -->
+  <div id="apiModal"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs hidden p-4">
+    <div
+      class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 flex flex-col gap-4 relative">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-2">
+          <div class="p-2 bg-amber-50 text-amber-600 rounded-lg">
+            <i data-lucide="key" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm">API Configuration</h3>
+            <p class="text-xs text-slate-500">Configure Google Gemini AI & OCR Engine API keys</p>
+          </div>
+        </div>
+        <button id="closeApiModalBtn" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="flex flex-col gap-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-500"></i>
+            Google Gemini API Key
+          </label>
+          <div class="relative">
+            <input type="password" id="customApiKeyInput" placeholder="AIzaSy..."
+              class="w-full text-xs font-mono bg-slate-50 border border-slate-200 rounded-lg pl-3 pr-9 py-2 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            <button type="button" id="toggleGeminiKeyVisBtn"
+              class="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 focus:outline-none"
+              title="Toggle visibility">
+              <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+          <div class="mt-2">
+            <label class="block text-[11px] font-semibold text-slate-600 mb-1">Gemini Model</label>
+            <select id="geminiModelSelect"
+              class="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-brand-500 font-medium cursor-pointer">
+              <option value="gemini-1.5-flash" selected>gemini-1.5-flash (Fast &amp; Recommended)</option>
+              <option value="gemini-1.5-flash-latest">gemini-1.5-flash-latest (Auto Updated)</option>
+              <option value="gemini-2.0-flash">gemini-2.0-flash (Next Generation)</option>
+              <option value="gemini-1.5-pro">gemini-1.5-pro (High Reasoning)</option>
+              <option value="gemini-1.5-flash-8b">gemini-1.5-flash-8b (Lightweight Fast)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <i data-lucide="scan-line" class="w-3.5 h-3.5 text-indigo-600"></i>
+              OCR Engine & Jina OCR Setup
+            </label>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">OCR Model / Provider</label>
+              <select id="ocrProviderSelect"
+                class="w-full text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-brand-500 font-medium cursor-pointer">
+                <option value="browser_tesseract" selected>Built-in Browser OCR (Tesseract.js - Free &amp; Offline)</option>
+                <option value="docker_jina">Docker AI / Ollama Jina OCR (http://localhost:11434/...)</option>
+                <option value="docker_8000">Docker Local vLLM (http://localhost:8000/...)</option>
+                <option value="jina_cloud">Official Jina AI Cloud (https://api.jina.ai/...)</option>
+                <option value="hf_jina">HuggingFace Inference (https://router.huggingface.co/...)</option>
+                <option value="ocrspace">OCR.space Cloud API (https://api.ocr.space/...)</option>
+              </select>
+              <p id="ocrProviderHint" class="text-[10px] text-slate-500 mt-1">⚡ Zero-setup offline OCR using WebAssembly right in your browser.</p>
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-600 mb-1">OCR Endpoint URL</label>
+              <input type="text" id="customOcrEndpointInput" placeholder="Client-side WebAssembly (No endpoint required)"
+                class="w-full text-xs font-mono bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-brand-500 disabled:bg-slate-100 disabled:text-slate-500"
+                value="Client-side WebAssembly (No endpoint required)" disabled />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-1">Jina / OCR API Key</label>
+            <div class="relative">
+              <input type="password" id="customOcrApiKeyInput" placeholder="None needed (Free &amp; 100% offline)"
+                class="w-full text-xs font-mono bg-white border border-slate-200 rounded-lg pl-3 pr-9 py-2 focus:ring-2 focus:ring-brand-500" />
+              <button type="button" id="toggleOcrKeyVisBtn"
+                class="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 focus:outline-none"
+                title="Toggle visibility">
+                <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-100">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-semibold text-slate-700">Gemini API:</span>
+            <div class="flex items-center gap-2">
+              <span id="apiStatusMessage" class="text-[11px] text-slate-500">Unverified</span>
+              <button id="testApiKeyBtn"
+                class="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-[11px] font-medium rounded-md transition-colors">Test</button>
+            </div>
+          </div>
+          <div class="flex items-center justify-between text-xs pt-2 border-t border-slate-200/60">
+            <span class="font-semibold text-slate-700">Jina / OCR API:</span>
+            <div class="flex items-center gap-2">
+              <span id="ocrStatusMessage" class="text-[11px] text-slate-500">Unverified</span>
+              <button id="testOcrKeyBtn"
+                class="px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-[11px] font-medium rounded-md transition-colors">Test</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button id="saveApiKeyBtn"
+          class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold shadow-xs">
+          Save Configuration
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- History Drawer -->
+  <aside id="historyDrawer"
+    class="fixed inset-y-0 right-0 max-w-sm w-full bg-white border-l border-slate-200 shadow-2xl z-40 transform translate-x-full transition-transform duration-300 flex flex-col">
+    <div class="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+      <div class="flex items-center gap-2">
+        <i data-lucide="folder-clock" class="w-5 h-5 text-brand-600"></i>
+        <h3 class="font-bold text-sm text-slate-900">Extracted PO Archive</h3>
+      </div>
+      <button id="closeHistoryBtn"
+        class="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+    <div class="p-3 border-b border-slate-100 flex items-center justify-between text-xs">
+      <span class="text-slate-500">Stored locally in current session</span>
+      <button id="clearHistoryBtn" class="text-red-500 hover:underline">Clear all</button>
+    </div>
+    <div id="historyList" class="flex-1 overflow-y-auto p-4 flex flex-col gap-3"></div>
+  </aside>
+  <div id="drawerBackdrop" class="fixed inset-0 bg-slate-900/20 backdrop-blur-xs z-30 hidden transition-opacity"></div>
+
+  <script>
+    // Templates and presets
+    const SAMPLE_POS = {
+      tech: {
+        raw: `PURCHASE ORDER: PO-2026-9021
+Date: 2026-09-24
+Delivery Date: 2026-10-15
+Payment Terms: Net 30 days
+Currency: USD
+
+BUYER:
+Acrobyte Systems Corp
+500 Tech Parkway, Suite 300, San Jose, CA 95110
+Attn: Sarah Jenkins (procurement@acrobyte.io)
+Tax ID: US-88291039
+
+VENDOR:
+Quantum Cloud Components Inc.
+1200 Silicon Avenue, Bldg B, Austin, TX 78701
+Contact: sales@quantumcloud.com
+Tax ID: TX-449102-A
+
+LINE ITEMS:
+1. Enterprise Rack Server R750 | SKU: SRV-750-X | Qty: 2 | Unit Price: $3,200.00 | Tax: 8.25%
+2. 32-Port Gigabit Managed Switch | SKU: NET-SW-32 | Qty: 4 | Unit Price: $450.00 | Tax: 8.25%
+3. Cat6A Shielded Patch Cable 10m | SKU: CAB-6A-10M | Qty: 25 | Unit Price: $14.50 | Tax: 8.25%
+4. Uninterruptible Power Supply 3kVA | SKU: PWR-UPS-3K | Qty: 2 | Unit Price: $890.00 | Tax: 8.25%
+
+ADDITIONAL CHARGES:
+Shipping & Handling: $120.00
+Volume Discount: $150.00`,
+        structured: {
+          poNumber: "PO-2026-9021",
+          issueDate: "2026-09-24",
+          dueDate: "2026-10-15",
+          paymentTerms: "Net 30 days",
+          currency: "$",
+          vendor: {
+            name: "Quantum Cloud Components Inc.",
+            address: "1200 Silicon Avenue, Bldg B, Austin, TX 78701",
+            contact: "sales@quantumcloud.com",
+            taxId: "TX-449102-A"
+          },
+          buyer: {
+            name: "Acrobyte Systems Corp",
+            address: "500 Tech Parkway, Suite 300, San Jose, CA 95110",
+            contact: "procurement@acrobyte.io",
+            taxId: "US-88291039"
+          },
+          items: [
+            { description: "Enterprise Rack Server R750", sku: "SRV-750-X", quantity: 2, unitPrice: 3200.00, taxRate: 8.25 },
+            { description: "32-Port Gigabit Managed Switch", sku: "NET-SW-32", quantity: 4, unitPrice: 450.00, taxRate: 8.25 },
+            { description: "Cat6A Shielded Patch Cable 10m", sku: "CAB-6A-10M", quantity: 25, unitPrice: 14.50, taxRate: 8.25 },
+            { description: "Uninterruptible Power Supply 3kVA", sku: "PWR-UPS-3K", quantity: 2, unitPrice: 890.00, taxRate: 8.25 }
+          ],
+          shipping: 120.00,
+          discount: 150.00,
+          notes: "Extracted enterprise datacenter purchase order with volume discount applied."
+        }
+      },
+      office: {
+        raw: `GLOBAL WORKSPACE SUPPLIES
+PURCHASE ORDER #GWS-44109
+Date of Issue: 2026-09-18
+Required By: 2026-09-30
+Terms: Due upon receipt
+
+Purchaser:
+Evergreen Financial Group
+88 Wall Street, 14th Floor, New York, NY 10005
+Tax ID: NY-1002931
+Contact: logistics@evergreen-fin.com
+
+Vendor:
+Paper & Desk Direct Ltd.
+45 Warehouse Road, Newark, NJ 07102
+Vendor VAT: NJ-9921820
+Email: orders@paperanddesk.com
+
+Items Ordered:
+- Ergonomic High-Back Mesh Chairs (Code: CHR-ERG-01) x 8 @ $249.99 each (Tax: 6.0%)
+- Standing Desk Dual Motor 60" (Code: DSK-STD-60) x 4 @ $480.00 each (Tax: 6.0%)
+- Recycled Printer Paper 10 Reams (Code: PPR-10R-A4) x 15 @ $42.00 each (Tax: 6.0%)
+
+Freight Cost: $85.00
+Promotional Rebate: $50.00`,
+        structured: {
+          poNumber: "GWS-44109",
+          issueDate: "2026-09-18",
+          dueDate: "2026-09-30",
+          paymentTerms: "Due upon receipt",
+          currency: "$",
+          vendor: {
+            name: "Paper & Desk Direct Ltd.",
+            address: "45 Warehouse Road, Newark, NJ 07102",
+            contact: "orders@paperanddesk.com",
+            taxId: "NJ-9921820"
+          },
+          buyer: {
+            name: "Evergreen Financial Group",
+            address: "88 Wall Street, 14th Floor, New York, NY 10005",
+            contact: "logistics@evergreen-fin.com",
+            taxId: "NY-1002931"
+          },
+          items: [
+            { description: "Ergonomic High-Back Mesh Chairs", sku: "CHR-ERG-01", quantity: 8, unitPrice: 249.99, taxRate: 6.0 },
+            { description: "Standing Desk Dual Motor 60\"", sku: "DSK-STD-60", quantity: 4, unitPrice: 480.00, taxRate: 6.0 },
+            { description: "Recycled Printer Paper 10 Reams", sku: "PPR-10R-A4", quantity: 15, unitPrice: 42.00, taxRate: 6.0 }
+          ],
+          shipping: 85.00,
+          discount: 50.00,
+          notes: "Facilities and office supply requisition order."
+        }
+      },
+      consulting: {
+        raw: `STATEMENT OF WORK & PURCHASE ORDER
+REF NO: PO-CLOUD-771
+Issued: 2026-09-20
+Payment Terms: Net 45
+
+Client Organization:
+Horizon Health Digital
+300 Medical Plaza, Chicago, IL 60611
+VAT: IL-8823199
+
+Supplier:
+CloudScale DevOps Partners
+710 Michigan Ave, Chicago, IL 60605
+Contact: accounts@cloudscale.dev
+
+Deliverables:
+- Kubernetes Cluster Migration Architecture | SKU: SRV-K8S-MIG | Qty: 40 | Rate: $175.00 | Tax: 0%
+- Terraform Infrastructure as Code Templates | SKU: DEV-TF-MOD | Qty: 1 | Rate: $4,500.00 | Tax: 0%
+- Security Hardening & Penetration Audit | SKU: SEC-AUD-01 | Qty: 1 | Rate: $3,200.00 | Tax: 0%
+
+No Shipping fees.`,
+        structured: {
+          poNumber: "PO-CLOUD-771",
+          issueDate: "2026-09-20",
+          dueDate: "2026-11-04",
+          paymentTerms: "Net 45",
+          currency: "$",
+          vendor: {
+            name: "CloudScale DevOps Partners",
+            address: "710 Michigan Ave, Chicago, IL 60605",
+            contact: "accounts@cloudscale.dev",
+            taxId: "IL-993010"
+          },
+          buyer: {
+            name: "Horizon Health Digital",
+            address: "300 Medical Plaza, Chicago, IL 60611",
+            contact: "billing@horizonhealth.org",
+            taxId: "IL-8823199"
+          },
+          items: [
+            { description: "Kubernetes Cluster Migration Architecture", sku: "SRV-K8S-MIG", quantity: 40, unitPrice: 175.00, taxRate: 0.0 },
+            { description: "Terraform Infrastructure as Code Templates", sku: "DEV-TF-MOD", quantity: 1, unitPrice: 4500.00, taxRate: 0.0 },
+            { description: "Security Hardening & Penetration Audit", sku: "SEC-AUD-01", quantity: 1, unitPrice: 3200.00, taxRate: 0.0 }
+          ],
+          shipping: 0.00,
+          discount: 0.00,
+          notes: "Professional services and cloud migration order."
+        }
+      }
+    };
+
+    // Primary PO model in memory
+    let currentPO = JSON.parse(JSON.stringify(SAMPLE_POS.tech.structured));
+
+    // Multi-File Queue: array of { id, name, size, type, isImage, mimeType, data (base64 or text) }
+    let uploadedFilesQueue = [];
+
+    let poHistory = [];
+    let customApiKey = localStorage.getItem('gemini_user_api_key') || '';
+    let customOcrApiKey = localStorage.getItem('ocr_user_api_key') || '';
+    let customOcrProvider = localStorage.getItem('ocr_provider') || 'browser_tesseract';
+    let customOcrEndpoint = localStorage.getItem('ocr_endpoint') || '';
+
+    // Auto-purge any deprecated, decommissioned, or legacy model names from browser cache
+    const currentCachedModel = localStorage.getItem('gemini_model');
+    if (!currentCachedModel || currentCachedModel.includes('2.5') || currentCachedModel.includes('3-flash-preview') || currentCachedModel.includes('gemini-1.0') || currentCachedModel.includes('pro-vision')) {
+      localStorage.removeItem('gemini_model');
+    }
+
+    function formatCurrency(val, symbol = null) {
+      const sym = symbol || document.getElementById('currencySelect').value;
+      const num = parseFloat(val) || 0;
+      return `${sym}${num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+
+    function renderLineItems() {
+      const tbody = document.getElementById('lineItemsBody');
+      tbody.innerHTML = '';
+      const currency = document.getElementById('currencySelect').value;
+
+      document.querySelectorAll('.currency-symbol-label').forEach(el => el.textContent = currency);
+
+      if (!currentPO.items || currentPO.items.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="py-6 text-center text-slate-400 text-xs font-medium italic">
+              No line items added yet. Click "+ Add Row" or upload documents to extract PO lines.
+            </td>
+          </tr>
+        `;
+        document.getElementById('lineItemCount').textContent = `0 items`;
+        recalculateTotals();
+        return;
+      }
+
+      currentPO.items.forEach((item, index) => {
+        const qty = parseFloat(item.quantity) || 0;
+        const price = parseFloat(item.unitPrice) || 0;
+        const taxRate = parseFloat(item.taxRate) || 0;
+        const lineSubtotal = qty * price;
+        const lineTax = lineSubtotal * (taxRate / 100);
+        const lineTotal = lineSubtotal + lineTax;
+
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50/70 transition-colors group";
+        tr.innerHTML = `
+          <td class="py-2.5 px-3">
+            <input type="text" class="w-full bg-transparent font-medium text-slate-900 border-b border-transparent focus:border-brand-500 focus:outline-none" 
+                   value="${escapeHtml(item.description)}" data-idx="${index}" data-field="description" placeholder="Description..." />
+          </td>
+          <td class="py-2.5 px-3 font-mono text-[11px] text-slate-500">
+            <input type="text" class="w-full bg-transparent border-b border-transparent focus:border-brand-500 focus:outline-none" 
+                   value="${escapeHtml(item.sku || '')}" data-idx="${index}" data-field="sku" placeholder="SKU/Code" />
+          </td>
+          <td class="py-2.5 px-2 text-right">
+            <input type="number" step="any" min="0" class="w-14 text-right bg-transparent border border-transparent hover:border-slate-200 focus:border-brand-500 focus:bg-white rounded px-1.5 py-0.5 focus:outline-none font-mono" 
+                   value="${item.quantity}" data-idx="${index}" data-field="quantity" />
+          </td>
+          <td class="py-2.5 px-3 text-right">
+            <div class="flex items-center justify-end gap-1">
+              <span class="text-slate-400">${currency}</span>
+              <input type="number" step="0.01" min="0" class="w-20 text-right bg-transparent border border-transparent hover:border-slate-200 focus:border-brand-500 focus:bg-white rounded px-1.5 py-0.5 focus:outline-none font-mono" 
+                     value="${item.unitPrice}" data-idx="${index}" data-field="unitPrice" />
+            </div>
+          </td>
+          <td class="py-2.5 px-2 text-right">
+            <div class="flex items-center justify-end gap-0.5">
+              <input type="number" step="0.1" min="0" class="w-12 text-right bg-transparent border border-transparent hover:border-slate-200 focus:border-brand-500 focus:bg-white rounded px-1 py-0.5 focus:outline-none font-mono text-[11px]" 
+                     value="${item.taxRate}" data-idx="${index}" data-field="taxRate" />
+              <span class="text-slate-400 text-[11px]">%</span>
+            </div>
+          </td>
+          <td class="py-2.5 px-3 text-right font-mono font-semibold text-slate-800">
+            ${formatCurrency(lineTotal, currency)}
+          </td>
+          <td class="py-2.5 px-2 text-center">
+            <button class="remove-row-btn text-slate-300 hover:text-red-500 transition-colors p-1 rounded" data-idx="${index}" title="Delete Row">
+              <i data-lucide="trash-2" class="w-3.5 h-3.5 pointer-events-none"></i>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById('lineItemCount').textContent = `${currentPO.items.length} ${currentPO.items.length === 1 ? 'item' : 'items'}`;
+      lucide.createIcons();
+      recalculateTotals();
+    }
+
+    function recalculateTotals() {
+      const currency = document.getElementById('currencySelect').value;
+      let subtotal = 0;
+      let totalTax = 0;
+
+      (currentPO.items || []).forEach(item => {
+        const qty = parseFloat(item.quantity) || 0;
+        const price = parseFloat(item.unitPrice) || 0;
+        const taxRate = parseFloat(item.taxRate) || 0;
+        const lineBase = qty * price;
+        subtotal += lineBase;
+        totalTax += lineBase * (taxRate / 100);
+      });
+
+      const shipping = parseFloat(document.getElementById('shippingInput').value) || 0;
+      const discount = parseFloat(document.getElementById('discountInput').value) || 0;
+      const grandTotal = Math.max(0, subtotal + totalTax + shipping - discount);
+
+      document.getElementById('subtotalVal').textContent = formatCurrency(subtotal, currency);
+      document.getElementById('taxTotalVal').textContent = formatCurrency(totalTax, currency);
+      document.getElementById('grandTotalVal').textContent = formatCurrency(grandTotal, currency);
+    }
+
+    function populateFormFromState() {
+      document.getElementById('fieldPoNumber').value = currentPO.poNumber || '';
+      document.getElementById('fieldIssueDate').value = currentPO.issueDate || '';
+      document.getElementById('fieldDueDate').value = currentPO.dueDate || '';
+      document.getElementById('fieldTerms').value = currentPO.paymentTerms || '';
+
+      if (currentPO.currency) {
+        const select = document.getElementById('currencySelect');
+        for (let opt of select.options) {
+          if (opt.value === currentPO.currency || opt.dataset.code === currentPO.currency) {
+            select.value = opt.value;
+            break;
+          }
+        }
+      }
+
+      document.getElementById('vendorName').value = currentPO.vendor?.name || '';
+      document.getElementById('vendorAddress').value = currentPO.vendor?.address || '';
+      document.getElementById('vendorContact').value = currentPO.vendor?.contact || '';
+      document.getElementById('vendorTaxId').value = currentPO.vendor?.taxId || '';
+
+      document.getElementById('buyerName').value = currentPO.buyer?.name || '';
+      document.getElementById('buyerAddress').value = currentPO.buyer?.address || '';
+      document.getElementById('buyerContact').value = currentPO.buyer?.contact || '';
+      document.getElementById('buyerTaxId').value = currentPO.buyer?.taxId || '';
+
+      document.getElementById('shippingInput').value = (currentPO.shipping !== undefined) ? currentPO.shipping : 0.00;
+      document.getElementById('discountInput').value = (currentPO.discount !== undefined) ? currentPO.discount : 0.00;
+
+      document.getElementById('extractionNotes').textContent = currentPO.notes || 'Purchase order workspace ready.';
+
+      renderLineItems();
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // MULTI-FILE QUEUE MANAGEMENT
+    function renderQueueUI() {
+      const container = document.getElementById('fileQueueContainer');
+      const list = document.getElementById('thumbnailsList');
+      const countEl = document.getElementById('queueCount');
+
+      countEl.textContent = uploadedFilesQueue.length;
+
+      if (uploadedFilesQueue.length === 0) {
+        container.classList.add('hidden');
+        list.innerHTML = '';
+        return;
+      }
+
+      container.classList.remove('hidden');
+      list.innerHTML = '';
+
+      uploadedFilesQueue.forEach((item, index) => {
+        const badge = document.createElement('div');
+        badge.className = "flex items-center gap-2 bg-white border border-slate-200 rounded-lg p-1.5 pr-2.5 shadow-2xs text-xs";
+
+        let previewHtml = '';
+        if (item.isImage) {
+          previewHtml = `<img src="data:${item.mimeType};base64,${item.data}" class="w-8 h-8 rounded object-cover border border-slate-100" />`;
+        } else {
+          previewHtml = `<div class="w-8 h-8 rounded bg-brand-50 text-brand-600 flex items-center justify-center font-bold text-[10px]">TXT</div>`;
+        }
+
+        badge.innerHTML = `
+          ${previewHtml}
+          <div class="flex flex-col min-w-[70px] max-w-[120px]">
+            <span class="truncate font-semibold text-slate-800 text-[11px]" title="${item.name}">${escapeHtml(item.name)}</span>
+            <span class="text-[10px] text-slate-400 font-mono">${(item.size / 1024).toFixed(1)} KB</span>
+          </div>
+          <button type="button" class="remove-queue-file-btn text-slate-400 hover:text-red-500 ml-1 p-0.5" data-idx="${index}" title="Remove file">
+            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+          </button>
+        `;
+        list.appendChild(badge);
+      });
+
+      lucide.createIcons();
+    }
+
+    function removeFileFromQueue(index) {
+      uploadedFilesQueue.splice(index, 1);
+      renderQueueUI();
+      showToast("File removed from extraction queue.", "info");
+    }
+
+    // Local heuristic parser
+    function parseWithLocalHeuristics(text) {
+      const clean = text.replace(/\r\n/g, '\n');
+
+      const poNumMatch = clean.match(/(?:purchase\s*order|po|ref(?:\s*no)?)[#:\s]+([A-Za-z0-9_-]+)/i) ||
+        clean.match(/(?:PO-\d{4}-\w+)/i) ||
+        clean.match(/#([A-Za-z0-9_-]{4,})/);
+      const poNumber = poNumMatch ? poNumMatch[1] : `PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      const dateMatches = clean.match(/\b(20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})\b/g) || [];
+      const issueDate = dateMatches[0] || new Date().toISOString().split('T')[0];
+      const dueDate = dateMatches[1] || "";
+
+      const termsMatch = clean.match(/(?:terms|payment\s*terms)[:\s]+([^\n\r]+)/i);
+      const paymentTerms = termsMatch ? termsMatch[1].trim() : "Net 30 days";
+
+      let currency = "$";
+      if (clean.includes("₹") || clean.includes("INR") || clean.includes("rupees") || clean.includes("Rs")) currency = "₹";
+      else if (clean.includes("€") || clean.includes("EUR")) currency = "€";
+      else if (clean.includes("£") || clean.includes("GBP")) currency = "£";
+      else if (clean.includes("¥") || clean.includes("JPY")) currency = "¥";
+
+      let vendor = { name: "Extracted Supplier", address: "", contact: "", taxId: "" };
+      const vendorSection = clean.match(/(?:vendor|supplier)[:\s]*([\s\S]*?)(?=(?:buyer|client|purchaser|line\s*items|items|deliverables|$))/i);
+      if (vendorSection) {
+        const lines = vendorSection[1].trim().split('\n').map(l => l.trim()).filter(l => l);
+        if (lines.length > 0) vendor.name = lines[0].replace(/^[:\-#\s]+/, '');
+        if (lines.length > 1) vendor.address = lines.slice(1, 3).join(', ');
+        const contactMatch = vendorSection[1].match(/(?:contact|email)[:\s]*([^\n\r]+)/i) || vendorSection[1].match(/[\w.-]+@[\w.-]+\.\w+/);
+        if (contactMatch) vendor.contact = contactMatch[1] || contactMatch[0];
+        const taxMatch = vendorSection[1].match(/(?:tax\s*id|vat)[:\s]*([A-Za-z0-9-]+)/i);
+        if (taxMatch) vendor.taxId = taxMatch[1];
+      }
+
+      let buyer = { name: "Extracted Buyer Organization", address: "", contact: "", taxId: "" };
+      const buyerSection = clean.match(/(?:buyer|client|purchaser|bill\s*to)[:\s]*([\s\S]*?)(?=(?:vendor|supplier|line\s*items|items|deliverables|$))/i);
+      if (buyerSection) {
+        const lines = buyerSection[1].trim().split('\n').map(l => l.trim()).filter(l => l);
+        if (lines.length > 0) buyer.name = lines[0].replace(/^[:\-#\s]+/, '');
+        if (lines.length > 1) buyer.address = lines.slice(1, 3).join(', ');
+        const contactMatch = buyerSection[1].match(/(?:contact|attn|email)[:\s]*([^\n\r]+)/i) || buyerSection[1].match(/[\w.-]+@[\w.-]+\.\w+/);
+        if (contactMatch) buyer.contact = contactMatch[1] || contactMatch[0];
+        const taxMatch = buyerSection[1].match(/(?:tax\s*id|vat)[:\s]*([A-Za-z0-9-]+)/i);
+        if (taxMatch) buyer.taxId = taxMatch[1];
+      }
+
+      let shipping = 0;
+      let discount = 0;
+      const shipMatch = clean.match(/(?:shipping|freight)[^\n\r$€£¥₹]*[$€£¥₹]?\s*([\d,]+\.?\d*)/i);
+      if (shipMatch) shipping = parseFloat(shipMatch[1].replace(/,/g, '')) || 0;
+      const discMatch = clean.match(/(?:discount|rebate)[^\n\r$€£¥₹]*[$€£¥₹]?\s*([\d,]+\.?\d*)/i);
+      if (discMatch) discount = parseFloat(discMatch[1].replace(/,/g, '')) || 0;
+
+      const items = [];
+      const lines = clean.split('\n');
+
+      lines.forEach(line => {
+        if (/qty|rate|price|sku|@|tax/i.test(line) && /[\d]+/.test(line)) {
+          let desc = line;
+          let sku = "";
+          let qty = 1;
+          let unitPrice = 100.00;
+          let taxRate = 5.0;
+
+          const skuMatch = line.match(/(?:sku|code)[:\s]*([A-Za-z0-9_-]+)/i);
+          if (skuMatch) sku = skuMatch[1];
+
+          const qtyMatch = line.match(/(?:qty|quantity)[:\s]*(\d+)/i) || line.match(/x\s*(\d+)/i);
+          if (qtyMatch) qty = parseInt(qtyMatch[1], 10);
+
+          const priceMatch = line.match(/(?:unit\s*price|rate|@)?[:\s]*[$€£¥₹]?\s*([\d,]+\.\d{2})/i) || line.match(/[$€£¥₹]\s*([\d,]+\.?\d*)/);
+          if (priceMatch) unitPrice = parseFloat(priceMatch[1].replace(/,/g, ''));
+
+          const taxMatch = line.match(/tax[:\s]*(\d+(?:\.\d+)?)\s*%/i);
+          if (taxMatch) taxRate = parseFloat(taxMatch[1]);
+
+          desc = line.replace(/^\d+[\.\-)]\s*/, '')
+            .replace(/^[•\-\*]\s*/, '')
+            .split(/\||\(|@/)[0].trim();
+
+          if (desc && desc.length > 2 && !/^(total|subtotal|shipping|freight|charges)/i.test(desc)) {
+            items.push({
+              description: desc,
+              sku: sku || `ITM-${Math.floor(100 + Math.random() * 900)}`,
+              quantity: qty || 1,
+              unitPrice: unitPrice || 50.00,
+              taxRate: taxRate || 0.0
+            });
+          }
+        }
+      });
+
+      if (items.length === 0) {
+        items.push({
+          description: "Procurement Items / Contract Deliverables",
+          sku: "GEN-001",
+          quantity: 1,
+          unitPrice: 500.00,
+          taxRate: 5.0
+        });
+      }
+
+      return {
+        poNumber,
+        issueDate,
+        dueDate,
+        paymentTerms,
+        currency,
+        vendor,
+        buyer,
+        items,
+        shipping,
+        discount,
+        confidenceRating: "Local Heuristics Verified",
+        notes: "Parsed through deterministic local pattern heuristics."
+      };
+    }
+
+    // DYNAMIC GEMINI MODEL LISTING (ListModels API)
+    async function fetchAvailableGeminiModels(apiKey) {
+      if (!apiKey) return [];
+      const cleanKey = apiKey.trim();
+      let models = [];
+
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${cleanKey}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.models)) {
+            models = data.models
+              .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+              .map(m => m.name.replace(/^models\//, ''))
+              .filter(name => !name.includes('2.5') && !name.includes('3-flash-preview') && !name.includes('gemini-1.0') && !name.includes('pro-vision'));
+          }
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData?.error?.message || `HTTP ${res.status}`);
+        }
+      } catch (err) {
+        // Fallback check on v1 endpoint
+        try {
+          const v1Res = await fetch(`https://generativelanguage.googleapis.com/v1/models?key=${cleanKey}`);
+          if (v1Res.ok) {
+            const v1Data = await v1Res.json();
+            if (Array.isArray(v1Data.models)) {
+              models = v1Data.models
+                .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+                .map(m => m.name.replace(/^models\//, ''))
+                .filter(name => !name.includes('2.5') && !name.includes('3-flash-preview') && !name.includes('gemini-1.0') && !name.includes('pro-vision'));
+            }
+          }
+        } catch (v1Err) {
+          console.warn("ListModels v1 error:", v1Err);
+        }
+      }
+
+      if (models.length === 0) {
+        models = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+      }
+
+      return models;
+    }
+
+    function populateGeminiModelDropdown(modelList, preferredModel = '') {
+      const select = document.getElementById('geminiModelSelect');
+      if (!select) return preferredModel || 'gemini-1.5-flash';
+
+      const cleanList = (Array.isArray(modelList) ? modelList : [])
+        .filter(m => m && !m.includes('2.5') && !m.includes('3-flash-preview') && !m.includes('gemini-1.0') && !m.includes('pro-vision'));
+      const activeList = cleanList.length > 0 ? cleanList : ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+
+      select.innerHTML = '';
+      activeList.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        select.appendChild(opt);
+      });
+
+      let cleanPreferred = preferredModel ? String(preferredModel).replace(/^models\//, '') : '';
+      if (cleanPreferred && (cleanPreferred.includes('2.5') || cleanPreferred.includes('3-flash-preview'))) {
+        cleanPreferred = '';
+      }
+
+      let target = (cleanPreferred && activeList.includes(cleanPreferred)) ? cleanPreferred : null;
+      if (!target) {
+        target = activeList.find(m => m === 'gemini-1.5-flash') ||
+                 activeList.find(m => m === 'gemini-1.5-flash-latest') ||
+                 activeList.find(m => m.includes('1.5-flash') && !m.includes('8b')) ||
+                 activeList.find(m => m.includes('2.0-flash')) ||
+                 activeList.find(m => m.includes('flash')) ||
+                 activeList.find(m => m.includes('1.5-pro')) ||
+                 activeList[0];
+      }
+
+      if (target) {
+        select.value = target;
+        localStorage.setItem('gemini_model', target);
+      }
+      return select.value;
+    }
+
+    // MULTI-IMAGE GEMINI VISION PARSER
+    async function extractPOWithGemini(rawText, base64ImagesArray = []) {
+      const storedKey = localStorage.getItem('gemini_user_api_key');
+      const apiKey = storedKey || "";
+      if (!apiKey) {
+        throw new Error("No Gemini API key configured. Using local parser fallback.");
+      }
+
+      // Automatically query or use confirmed available models, strictly filtering deprecated versions
+      let savedModel = (localStorage.getItem('gemini_model') || '').replace(/^models\//, '');
+      if (savedModel.includes('2.5') || savedModel.includes('3-flash-preview')) {
+        localStorage.removeItem('gemini_model');
+        savedModel = '';
+      }
+
+      let modelsToTry = [savedModel, 'gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-2.0-flash', 'gemini-1.5-pro']
+        .filter(m => m && !m.includes('2.5') && !m.includes('3-flash-preview'));
+      modelsToTry = modelsToTry.filter((m, i, arr) => arr.indexOf(m) === i);
+
+      try {
+        const available = await fetchAvailableGeminiModels(apiKey);
+        const cleanAvailable = available.filter(m => !m.includes('2.5') && !m.includes('3-flash-preview'));
+        if (cleanAvailable.length > 0) {
+          modelsToTry = cleanAvailable;
+          if (savedModel && cleanAvailable.includes(savedModel)) {
+            modelsToTry = [savedModel, ...cleanAvailable.filter(m => m !== savedModel)];
+          }
+        }
+      } catch (err) {
+        console.warn("Could not query ListModels during extraction:", err.message);
+      }
+
+      const systemInstruction = `You are a certified procurement auditor and expert AI data extraction engine specializing in Purchase Orders (POs) and invoices.
+You will be provided with one or more document images and/or text representations of a purchase order (e.g. multi-page PO, attached continuation sheets, or multiple invoice images).
+Inspect ALL provided images and text thoroughly. Combine and extract all line items across all images into a unified, clean Purchase Order JSON.
+Convert all quantities, unit prices, and tax rates into numeric values without currency symbols.`;
+
+      const prompt = `Extract all purchase order metadata and compile all individual line items across the attached image(s) or document text:
+---
+${rawText || "Please inspect the attached PO image(s)."}
+---`;
+
+      const jsonSchema = {
+        type: "OBJECT",
+        properties: {
+          poNumber: { type: "STRING" },
+          issueDate: { type: "STRING" },
+          dueDate: { type: "STRING" },
+          paymentTerms: { type: "STRING" },
+          currency: { type: "STRING" },
+          vendor: {
+            type: "OBJECT",
+            properties: {
+              name: { type: "STRING" },
+              address: { type: "STRING" },
+              contact: { type: "STRING" },
+              taxId: { type: "STRING" }
+            },
+            required: ["name"]
+          },
+          buyer: {
+            type: "OBJECT",
+            properties: {
+              name: { type: "STRING" },
+              address: { type: "STRING" },
+              contact: { type: "STRING" },
+              taxId: { type: "STRING" }
+            },
+            required: ["name"]
+          },
+          items: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                description: { type: "STRING" },
+                sku: { type: "STRING" },
+                quantity: { type: "NUMBER" },
+                unitPrice: { type: "NUMBER" },
+                taxRate: { type: "NUMBER" }
+              },
+              required: ["description", "quantity", "unitPrice"]
+            }
+          },
+          shipping: { type: "NUMBER" },
+          discount: { type: "NUMBER" },
+          confidenceRating: { type: "STRING" },
+          notes: { type: "STRING" }
+        },
+        required: ["poNumber", "vendor", "buyer", "items"]
+      };
+
+      const parts = [{ text: prompt }];
+
+      // Attach all images in queue to request parts
+      if (Array.isArray(base64ImagesArray)) {
+        base64ImagesArray.forEach(img => {
+          if (img && img.data) {
+            parts.push({
+              inlineData: {
+                mimeType: img.mimeType || "image/png",
+                data: img.data
+              }
+            });
+          }
+        });
+      }
+
+      const payload = {
+        contents: [{ role: "user", parts }],
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: jsonSchema
+        }
+      };
+
+      let lastError = null;
+      for (const model of modelsToTry) {
+        const cleanModel = String(model).replace(/^models\//, '');
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${apiKey}`;
+        try {
+          const res = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            const errMsg = errData?.error?.message || `Gemini API returned status ${res.status}`;
+
+            const isModelUnavailable = (res.status === 404 || res.status === 410) ||
+              (res.status === 400 && (
+                errMsg.includes('no longer available') ||
+                errMsg.includes('not found') ||
+                errMsg.includes('not supported') ||
+                errMsg.includes('is deprecated') ||
+                errMsg.includes('Interactions API')
+              ));
+
+            if (isModelUnavailable) {
+              console.warn(`Model ${cleanModel} unavailable (${errMsg}), attempting next model...`);
+              continue;
+            }
+
+            if (res.status === 429) {
+              throw new Error("HTTP 429: Gemini API Rate Limit reached.");
+            }
+            throw new Error(errMsg);
+          }
+
+          const result = await res.json();
+          const candidate = result.candidates?.[0];
+          const jsonText = candidate?.content?.parts?.[0]?.text;
+
+          if (jsonText) {
+            localStorage.setItem('gemini_model', cleanModel);
+            return JSON.parse(jsonText);
+          }
+          throw new Error("No parsed content in Gemini response.");
+        } catch (err) {
+          lastError = err;
+          if (err.message.includes('429')) throw err;
+        }
+      }
+      throw lastError || new Error("Failed to extract PO with Gemini.");
+    }
+
+    // OCR function for a single image item (with multi-engine fallback)
+    async function extractTextWithOCR(base64ImageData, ocrApiKey = '', provider = null, endpointUrl = null) {
+      const apiKey = ocrApiKey || localStorage.getItem('ocr_user_api_key') || '';
+      const prov = provider || localStorage.getItem('ocr_provider') || 'browser_tesseract';
+      let endpoint = endpointUrl || localStorage.getItem('ocr_endpoint');
+
+      // 1. Built-in In-Browser Tesseract.js (Client-side, 100% Free & Offline)
+      if (prov === 'browser_tesseract') {
+        if (typeof Tesseract !== 'undefined') {
+          try {
+            const imgUrl = `data:${base64ImageData.mimeType || 'image/png'};base64,${base64ImageData.data}`;
+            const result = await Tesseract.recognize(imgUrl, 'eng');
+            const txt = result.data?.text || '';
+            if (txt.trim()) return txt.trim();
+          } catch (tErr) {
+            console.warn("Tesseract client OCR error:", tErr.message);
+          }
+        }
+      }
+
+      // 2. Try Server-side OCR Proxy (Avoids Browser CORS blocks)
+      try {
+        const res = await fetch('/api/ocr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            image: base64ImageData,
+            provider: prov,
+            endpoint: endpoint,
+            apiKey: apiKey
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.success && data.text) {
+            return data.text.trim();
+          }
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          console.warn(`Server OCR proxy failed (${prov}):`, errData?.error);
+        }
+      } catch (proxyErr) {
+        console.warn(`Server OCR proxy request error:`, proxyErr.message);
+      }
+
+      // 3. Direct browser fallback for OCR.space
+      if (prov === 'ocrspace') {
+        try {
+          const formData = new FormData();
+          formData.append('apikey', apiKey || 'helloworld');
+          formData.append('base64Image', `data:${base64ImageData.mimeType || 'image/png'};base64,${base64ImageData.data}`);
+          formData.append('language', 'eng');
+          formData.append('isOverlayRequired', 'false');
+          formData.append('OCREngine', '2');
+
+          const res = await fetch('https://api.ocr.space/parse/image', {
+            method: 'POST',
+            body: formData
+          });
+
+          if (res.ok) {
+            const result = await res.json();
+            const parsedText = result.ParsedResults?.[0]?.ParsedText;
+            if (parsedText && parsedText.trim()) return parsedText.trim();
+          }
+        } catch (ocrSpaceErr) {
+          console.warn("Direct OCR.space fallback error:", ocrSpaceErr.message);
+        }
+      }
+
+      // 4. Guaranteed Last-resort Fallback: In-browser Tesseract.js
+      if (typeof Tesseract !== 'undefined') {
+        try {
+          showToast("Using built-in browser OCR engine...", "info");
+          const imgUrl = `data:${base64ImageData.mimeType || 'image/png'};base64,${base64ImageData.data}`;
+          const result = await Tesseract.recognize(imgUrl, 'eng');
+          if (result.data?.text?.trim()) {
+            return result.data.text.trim();
+          }
+        } catch (tFallbackErr) {
+          console.error("Tesseract fallback failed:", tFallbackErr);
+        }
+      }
+
+      throw new Error(`OCR extraction failed for provider '${prov}'. Please check your settings or use Built-in Browser OCR.`);
+    }
+
+    function clearExtractedPO() {
+      currentPO = {
+        poNumber: "",
+        issueDate: "",
+        dueDate: "",
+        paymentTerms: "",
+        currency: "$",
+        vendor: { name: "", address: "", contact: "", taxId: "" },
+        buyer: { name: "", address: "", contact: "", taxId: "" },
+        items: [],
+        shipping: 0.00,
+        discount: 0.00,
+        notes: "Workspace cleared."
+      };
+
+      document.getElementById('rawTextEditor').value = '';
+      uploadedFilesQueue = [];
+      renderQueueUI();
+      document.getElementById('fileInput').value = '';
+      document.getElementById('presetSelector').value = '';
+
+      populateFormFromState();
+
+      const statusBadge = document.getElementById('poStatusBadge');
+      statusBadge.textContent = "Cleared / Blank";
+      statusBadge.className = "ml-2 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-slate-100 text-slate-600 border border-slate-200";
+
+      showToast("Cleared purchase order workspace.");
+    }
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const isSuccess = type === 'success';
+      const isError = type === 'error';
+      const isInfo = type === 'info';
+
+      toast.className = `pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-xl border text-xs font-semibold shadow-lg transition-all duration-300 transform translate-y-2 opacity-0 ${isSuccess ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+        isError ? 'bg-rose-50 border-rose-200 text-rose-800' :
+          isInfo ? 'bg-brand-50 border-brand-200 text-brand-800' :
+            'bg-slate-800 border-slate-700 text-white'
+        }`;
+
+      const icon = isSuccess ? 'check-circle' : isError ? 'alert-triangle' : isInfo ? 'info' : 'bell';
+      toast.innerHTML = `<i data-lucide="${icon}" class="w-4 h-4 shrink-0"></i><span>${message}</span>`;
+      container.appendChild(toast);
+      lucide.createIcons();
+
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    function exportToJSON() {
+      syncFormToState();
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentPO, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `${currentPO.poNumber || 'purchase_order'}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      showToast("Purchase order exported as JSON.");
+    }
+
+    function exportToCSV() {
+      syncFormToState();
+      let csv = "PO Number,Issue Date,Vendor Name,Buyer Name,Item SKU,Description,Quantity,Unit Price,Tax Rate %,Line Total\n";
+      const poNum = `"${currentPO.poNumber || ''}"`;
+      const issueDate = `"${currentPO.issueDate || ''}"`;
+      const vName = `"${currentPO.vendor?.name || ''}"`;
+      const bName = `"${currentPO.buyer?.name || ''}"`;
+
+      (currentPO.items || []).forEach(it => {
+        const qty = parseFloat(it.quantity) || 0;
+        const price = parseFloat(it.unitPrice) || 0;
+        const tax = parseFloat(it.taxRate) || 0;
+        const total = (qty * price) * (1 + tax / 100);
+
+        csv += `${poNum},${issueDate},${vName},${bName},"${it.sku || ''}","${it.description.replace(/"/g, '""')}",${qty},${price},${tax},${total.toFixed(2)}\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${currentPO.poNumber || 'po_data'}_items.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      showToast("Line items exported as CSV.");
+    }
+
+    function syncFormToState() {
+      currentPO.poNumber = document.getElementById('fieldPoNumber').value.trim();
+      currentPO.issueDate = document.getElementById('fieldIssueDate').value;
+      currentPO.dueDate = document.getElementById('fieldDueDate').value;
+      currentPO.paymentTerms = document.getElementById('fieldTerms').value.trim();
+      currentPO.currency = document.getElementById('currencySelect').value;
+
+      currentPO.vendor.name = document.getElementById('vendorName').value.trim();
+      currentPO.vendor.address = document.getElementById('vendorAddress').value.trim();
+      currentPO.vendor.contact = document.getElementById('vendorContact').value.trim();
+      currentPO.vendor.taxId = document.getElementById('vendorTaxId').value.trim();
+
+      currentPO.buyer.name = document.getElementById('buyerName').value.trim();
+      currentPO.buyer.address = document.getElementById('buyerAddress').value.trim();
+      currentPO.buyer.contact = document.getElementById('buyerContact').value.trim();
+      currentPO.buyer.taxId = document.getElementById('buyerTaxId').value.trim();
+
+      currentPO.shipping = parseFloat(document.getElementById('shippingInput').value) || 0;
+      currentPO.discount = parseFloat(document.getElementById('discountInput').value) || 0;
+    }
+
+    function savePOToHistory() {
+      syncFormToState();
+      const statusBadge = document.getElementById('poStatusBadge');
+      statusBadge.textContent = "Approved & Saved";
+      statusBadge.className = "ml-2 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200";
+
+      const record = {
+        id: Date.now(),
+        savedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        poData: JSON.parse(JSON.stringify(currentPO))
+      };
+
+      poHistory.unshift(record);
+      updateHistoryUI();
+      showToast(`Purchase order ${currentPO.poNumber} archived.`);
+    }
+
+    function updateHistoryUI() {
+      const list = document.getElementById('historyList');
+      const badge = document.getElementById('historyCountBadge');
+      badge.textContent = poHistory.length;
+
+      if (poHistory.length === 0) {
+        list.innerHTML = `
+          <div class="text-center py-10 text-slate-400 text-xs">
+            <i data-lucide="inbox" class="w-8 h-8 mx-auto mb-2 opacity-50"></i>
+            No saved purchase orders yet. Click "Approve & Save" to store.
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      list.innerHTML = '';
+      poHistory.forEach((rec) => {
+        const itemCard = document.createElement('div');
+        itemCard.className = "p-3 rounded-xl border border-slate-200 bg-white hover:border-brand-300 transition-all cursor-pointer group shadow-2xs";
+
+        let totalVal = 0;
+        (rec.poData.items || []).forEach(it => {
+          totalVal += (it.quantity * it.unitPrice) * (1 + (it.taxRate || 0) / 100);
+        });
+        totalVal += (rec.poData.shipping || 0) - (rec.poData.discount || 0);
+
+        itemCard.innerHTML = `
+          <div class="flex items-center justify-between mb-1">
+            <span class="font-bold text-xs text-brand-700 group-hover:text-brand-800">${escapeHtml(rec.poData.poNumber || 'Untitled PO')}</span>
+            <span class="text-[10px] text-slate-400 font-mono">${rec.savedAt}</span>
+          </div>
+          <div class="text-xs text-slate-600 truncate font-medium">${escapeHtml(rec.poData.vendor?.name || 'Unknown Vendor')}</div>
+          <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-xs">
+            <span class="text-slate-400">${rec.poData.items?.length || 0} line items</span>
+            <span class="font-bold font-mono text-slate-900">${formatCurrency(totalVal, rec.poData.currency || '$')}</span>
+          </div>
+        `;
+
+        itemCard.addEventListener('click', () => {
+          currentPO = JSON.parse(JSON.stringify(rec.poData));
+          populateFormFromState();
+          document.getElementById('rawTextEditor').value = `[Restored from Session History: ${rec.poData.poNumber}]`;
+          document.getElementById('historyDrawer').classList.add('translate-x-full');
+          document.getElementById('drawerBackdrop').classList.add('hidden');
+          showToast(`Restored ${rec.poData.poNumber} to workspace.`);
+        });
+
+        list.appendChild(itemCard);
+      });
+      lucide.createIcons();
+    }
+
+    // App Initialization
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      populateFormFromState();
+      document.getElementById('rawTextEditor').value = SAMPLE_POS.tech.raw;
+
+      if (customApiKey) document.getElementById('customApiKeyInput').value = customApiKey;
+      const savedGeminiModel = localStorage.getItem('gemini_model') || 'gemini-1.5-flash';
+      const geminiModelSelect = document.getElementById('geminiModelSelect');
+      if (geminiModelSelect) geminiModelSelect.value = savedGeminiModel;
+
+      if (customOcrApiKey) document.getElementById('customOcrApiKeyInput').value = customOcrApiKey;
+      if (customOcrProvider) document.getElementById('ocrProviderSelect').value = customOcrProvider;
+      if (customOcrEndpoint) document.getElementById('customOcrEndpointInput').value = customOcrEndpoint;
+
+      // Query Unified AI status from Server .env
+      async function checkServerAiConfig() {
+        try {
+          const res = await fetch('/api/ai-config');
+          const data = await res.json();
+          if (data && data.success && data.providers) {
+            const gem = data.providers.gemini;
+            if (gem && gem.configured) {
+              const badge = document.getElementById('headerEngineBadge');
+              if (badge) {
+                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span><span>Gemini AI (.env Ready)</span>`;
+                badge.className = "px-2 py-0.5 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full flex items-center gap-1";
+              }
+              const activeText = document.getElementById('activeEngineText');
+              if (activeText) {
+                activeText.textContent = `Google Gemini (${gem.model}) via .env`;
+              }
+              const keyInput = document.getElementById('customApiKeyInput');
+              if (keyInput && !keyInput.value) {
+                keyInput.placeholder = "Configured in server .env (GEMINI_API_KEY)";
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("Could not check /api/ai-config:", e);
+        }
+      }
+      checkServerAiConfig();
+
+      const updateOcrInputs = (prov) => {
+        const endpointInput = document.getElementById('customOcrEndpointInput');
+        const keyInput = document.getElementById('customOcrApiKeyInput');
+        const hintEl = document.getElementById('ocrProviderHint');
+
+        if (prov === 'browser_tesseract') {
+          endpointInput.value = 'Client-side WebAssembly (No endpoint required)';
+          endpointInput.disabled = true;
+          keyInput.placeholder = 'None needed (Free & 100% offline)';
+          if (hintEl) hintEl.textContent = '⚡ Zero-setup offline OCR using WebAssembly right in your browser.';
+        } else if (prov === 'docker_jina') {
+          endpointInput.disabled = false;
+          endpointInput.value = 'http://localhost:11434/v1/chat/completions';
+          keyInput.placeholder = 'Optional (or Ollama auth token)';
+          if (hintEl) hintEl.textContent = 'Runs local Ollama / Docker AI with jina-ocr-v1 vision model.';
+        } else if (prov === 'docker_8000') {
+          endpointInput.disabled = false;
+          endpointInput.value = 'http://localhost:8000/v1/chat/completions';
+          keyInput.placeholder = 'Optional';
+          if (hintEl) hintEl.textContent = 'Connects to local vLLM / FastChat container on port 8000.';
+        } else if (prov === 'jina_cloud') {
+          endpointInput.disabled = false;
+          endpointInput.value = 'https://api.jina.ai/v1/chat/completions';
+          keyInput.placeholder = 'jina_... (Get at https://jina.ai)';
+          if (hintEl) hintEl.textContent = 'Official Jina AI Cloud vision API.';
+        } else if (prov === 'hf_jina') {
+          endpointInput.disabled = false;
+          endpointInput.value = 'https://router.huggingface.co/hf-inference/models/jinaai/jina-ocr-v1';
+          keyInput.placeholder = 'hf_... (HuggingFace User Access Token)';
+          if (hintEl) hintEl.textContent = 'Serverless HuggingFace inference on jinaai/jina-ocr-v1.';
+        } else if (prov === 'ocrspace') {
+          endpointInput.disabled = false;
+          endpointInput.value = 'https://api.ocr.space/parse/image';
+          keyInput.placeholder = 'helloworld (or your free OCR.space key)';
+          if (hintEl) hintEl.textContent = 'Free cloud OCR API supporting multiple languages and engine 2.';
+        }
+      };
+
+      const initialProv = customOcrProvider || 'browser_tesseract';
+      document.getElementById('ocrProviderSelect').value = initialProv;
+      updateOcrInputs(initialProv);
+      if (customOcrEndpoint && initialProv !== 'browser_tesseract') {
+        document.getElementById('customOcrEndpointInput').value = customOcrEndpoint;
+      }
+
+      document.getElementById('ocrProviderSelect').addEventListener('change', (e) => {
+        updateOcrInputs(e.target.value);
+      });
+
+      // Transfer to Voice POS action
+      document.getElementById('transferToVoicePosBtn').addEventListener('click', () => {
+        syncFormToState();
+        if (!currentPO.items || currentPO.items.length === 0) {
+          showToast("No line items to send. Please add or extract items first.", "error");
+          return;
+        }
+
+        const transferPayload = {
+          poNumber: currentPO.poNumber || 'PO-EXTRACTED',
+          vendor: currentPO.vendor?.name || 'Supplier',
+          buyer: currentPO.buyer?.name || '',
+          currency: currentPO.currency || '$',
+          discount: currentPO.discount || 0,
+          shipping: currentPO.shipping || 0,
+          items: currentPO.items,
+          timestamp: Date.now()
+        };
+
+        localStorage.setItem('chat2bill_po_transfer', JSON.stringify(transferPayload));
+        showToast(`Transferring ${currentPO.items.length} items to Voice POS...`, "success");
+        setTimeout(() => {
+          window.location.href = '/?imported=po';
+        }, 500);
+      });
+
+      // Quick Sample Preset
+      document.getElementById('quickSampleBtn').addEventListener('click', () => {
+        const keys = Object.keys(SAMPLE_POS);
+        const randomKey = keys[Math.floor(Math.random() * keys.length)];
+        loadSamplePreset(randomKey);
+      });
+
+      document.getElementById('presetSelector').addEventListener('change', (e) => {
+        if (e.target.value) loadSamplePreset(e.target.value);
+      });
+
+      function loadSamplePreset(key) {
+        if (!SAMPLE_POS[key]) return;
+        const sample = SAMPLE_POS[key];
+        document.getElementById('rawTextEditor').value = sample.raw;
+        currentPO = JSON.parse(JSON.stringify(sample.structured));
+
+        uploadedFilesQueue = [];
+        renderQueueUI();
+
+        populateFormFromState();
+
+        const statusBadge = document.getElementById('poStatusBadge');
+        statusBadge.textContent = "Template Loaded";
+        statusBadge.className = "ml-2 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-blue-50 text-blue-700 border border-blue-200";
+
+        showToast(`Loaded ${sample.structured.poNumber} template.`);
+      }
+
+      // Clear input button
+      document.getElementById('clearInputBtn').addEventListener('click', () => {
+        document.getElementById('rawTextEditor').value = '';
+        showToast("Input text cleared.");
+      });
+
+      // Clear entire queue button
+      document.getElementById('clearQueueBtn').addEventListener('click', () => {
+        uploadedFilesQueue = [];
+        renderQueueUI();
+        document.getElementById('fileInput').value = '';
+        showToast("Cleared file queue.");
+      });
+
+      // Delegated listener to remove individual files
+      document.getElementById('thumbnailsList').addEventListener('click', (e) => {
+        const btn = e.target.closest('.remove-queue-file-btn');
+        if (btn) {
+          const idx = parseInt(btn.dataset.idx, 10);
+          if (!isNaN(idx)) removeFileFromQueue(idx);
+        }
+      });
+
+      // MULTI-FILE FILE INPUT & DRAG AND DROP
+      const fileInput = document.getElementById('fileInput');
+      const dropZone = document.getElementById('dropZone');
+
+      fileInput.addEventListener('change', (e) => {
+        handleIncomingFiles(e.target.files);
+        fileInput.value = '';
+      });
+
+      ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.add('border-brand-500', 'bg-brand-50/40');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          dropZone.classList.remove('border-brand-500', 'bg-brand-50/40');
+        });
+      });
+
+      dropZone.addEventListener('drop', (e) => {
+        if (e.dataTransfer && e.dataTransfer.files) {
+          handleIncomingFiles(e.dataTransfer.files);
+        }
+      });
+
+      async function handleIncomingFiles(files) {
+        if (!files || files.length === 0) return;
+
+        let addedCount = 0;
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+
+          // Deduplicate based on file name and size
+          const exists = uploadedFilesQueue.some(f => f.name === file.name && f.size === file.size);
+          if (exists) continue;
+
+          if (file.type.startsWith('image/')) {
+            const base64Data = await readFileAsBase64(file);
+            uploadedFilesQueue.push({
+              id: Date.now() + Math.random(),
+              name: file.name,
+              size: file.size,
+              type: file.type,
+              isImage: true,
+              mimeType: file.type,
+              data: base64Data
+            });
+            addedCount++;
+          } else {
+            const textContent = await readFileAsText(file);
+            const editor = document.getElementById('rawTextEditor');
+            editor.value = (editor.value.trim() ? editor.value.trim() + "\n\n" : "") + textContent;
+
+            uploadedFilesQueue.push({
+              id: Date.now() + Math.random(),
+              name: file.name,
+              size: file.size,
+              type: file.type,
+              isImage: false,
+              mimeType: 'text/plain',
+              data: textContent
+            });
+            addedCount++;
+          }
+        }
+
+        renderQueueUI();
+        if (addedCount > 0) {
+          showToast(`Added ${addedCount} file${addedCount > 1 ? 's' : ''} to upload queue.`);
+        }
+      }
+
+      function readFileAsBase64(file) {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result.split(',')[1]);
+          reader.readAsDataURL(file);
+        });
+      }
+
+      function readFileAsText(file) {
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result);
+          reader.readAsText(file);
+        });
+      }
+
+      // DUAL-ENGINE / MULTI-IMAGE EXTRACTION
+      document.getElementById('extractBtn').addEventListener('click', async () => {
+        let rawText = document.getElementById('rawTextEditor').value.trim();
+        const queuedImages = uploadedFilesQueue.filter(f => f.isImage);
+
+        if (!rawText && queuedImages.length === 0) {
+          showToast("Please provide PO text or upload at least one image.", "error");
+          return;
+        }
+
+        const parserMode = document.querySelector('input[name="parserMode"]:checked')?.value || 'auto';
+        const btn = document.getElementById('extractBtn');
+        const btnText = document.getElementById('extractBtnText');
+        const spinner = document.getElementById('extractSpinner');
+
+        btn.disabled = true;
+        spinner.classList.remove('hidden');
+
+        let extractedResult = null;
+        let usedEngine = "Gemini AI";
+
+        try {
+          if (parserMode === 'ocr') {
+            // Dedicated OCR Mode across all images
+            if (queuedImages.length > 0) {
+              btnText.textContent = `Running OCR (${queuedImages.length} images)...`;
+              let aggregatedOcrText = rawText ? rawText + "\n\n" : "";
+
+              for (let i = 0; i < queuedImages.length; i++) {
+                try {
+                  const ocrText = await extractTextWithOCR(queuedImages[i], customOcrApiKey);
+                  aggregatedOcrText += `\n--- OCR Page/Image ${i + 1}: ${queuedImages[i].name} ---\n` + ocrText + "\n";
+                } catch (ocrErr) {
+                  console.warn(`OCR error for ${queuedImages[i].name}:`, ocrErr.message);
+                }
+              }
+
+              document.getElementById('rawTextEditor').value = aggregatedOcrText.trim();
+              rawText = aggregatedOcrText.trim();
+              showToast("Batch OCR Recognition completed!", "info");
+            }
+            extractedResult = parseWithLocalHeuristics(rawText);
+            usedEngine = queuedImages.length > 0 ? `OCR (${queuedImages.length} files) + Heuristics` : "Local Heuristic Engine";
+
+          } else if (parserMode === 'local') {
+            btnText.textContent = "Processing Local Engine...";
+            extractedResult = parseWithLocalHeuristics(rawText);
+            usedEngine = "Local Heuristics Engine";
+
+          } else {
+            // Auto Mode: Unified Backend AI (Gemini .env + Multi-Image + Groq Fallback)
+            btnText.textContent = queuedImages.length > 1 ? `Extracting from ${queuedImages.length} images...` : "Extracting PO Data...";
+
+            try {
+              let selectedModel = (localStorage.getItem('gemini_model') || 'gemini-1.5-flash').replace(/^models\//, '');
+              if (selectedModel.includes('2.5') || selectedModel.includes('3-flash-preview')) {
+                localStorage.removeItem('gemini_model');
+                selectedModel = 'gemini-1.5-flash';
+              }
+              const reqHeaders = { 'Content-Type': 'application/json' };
+              if (customApiKey) reqHeaders['x-gemini-api-key'] = customApiKey;
+
+              const res = await fetch('/api/extract-po', {
+                method: 'POST',
+                headers: reqHeaders,
+                body: JSON.stringify({
+                  rawText: rawText,
+                  images: queuedImages,
+                  model: selectedModel,
+                  parserMode: 'auto'
+                })
+              });
+
+              if (res.ok) {
+                const apiRes = await res.json();
+                if (apiRes.success && apiRes.data) {
+                  extractedResult = apiRes.data;
+                  if (apiRes.provider === 'gemini') {
+                    usedEngine = queuedImages.length > 1 
+                      ? `Gemini AI (${apiRes.model}, ${queuedImages.length} Images Batch)` 
+                      : `Gemini AI (${apiRes.model})`;
+                  } else if (apiRes.provider === 'groq') {
+                    usedEngine = `Groq LLM (${apiRes.model})`;
+                  } else {
+                    usedEngine = "Local Heuristics Engine";
+                  }
+                }
+              }
+
+              if (!extractedResult) {
+                extractedResult = await extractPOWithGemini(rawText, queuedImages);
+                usedEngine = `Gemini AI (${selectedModel})`;
+              }
+            } catch (err) {
+              console.warn("AI extraction fallback to local heuristics:", err.message);
+              if (err.message.includes('429')) {
+                showToast("AI Rate Limit reached. Switched to Local Engine.", "info");
+                usedEngine = "Local Engine (Rate Limit Fallback)";
+              } else {
+                usedEngine = "High-Precision Local Engine";
+              }
+              extractedResult = parseWithLocalHeuristics(rawText);
+            }
+          }
+
+          if (extractedResult) {
+            currentPO = {
+              poNumber: extractedResult.poNumber || "PO-EXTRACTED",
+              issueDate: extractedResult.issueDate || new Date().toISOString().split('T')[0],
+              dueDate: extractedResult.dueDate || "",
+              paymentTerms: extractedResult.paymentTerms || "Net 30",
+              currency: extractedResult.currency || "$",
+              vendor: extractedResult.vendor || {},
+              buyer: extractedResult.buyer || {},
+              items: extractedResult.items || [],
+              shipping: extractedResult.shipping || 0,
+              discount: extractedResult.discount || 0,
+              notes: extractedResult.notes || `Processed via ${usedEngine}.`
+            };
+
+            populateFormFromState();
+
+            const statusBadge = document.getElementById('poStatusBadge');
+            statusBadge.textContent = "Extracted";
+            statusBadge.className = "ml-2 px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200";
+
+            document.getElementById('activeEngineText').textContent = usedEngine;
+            showToast(`Extracted ${currentPO.items.length} line items with ${usedEngine}!`, "success");
+          }
+        } catch (globalErr) {
+          console.error("Extraction error:", globalErr);
+          showToast("Failed to process extraction: " + globalErr.message, "error");
+        } finally {
+          btn.disabled = false;
+          btnText.textContent = "Extract PO Data";
+          spinner.classList.add('hidden');
+        }
+      });
+
+      // Line item dynamic updates
+      document.getElementById('lineItemsBody').addEventListener('input', (e) => {
+        const target = e.target;
+        const idx = target.dataset.idx;
+        const field = target.dataset.field;
+
+        if (idx !== undefined && field && currentPO.items[idx]) {
+          if (field === 'quantity' || field === 'unitPrice' || field === 'taxRate') {
+            currentPO.items[idx][field] = parseFloat(target.value) || 0;
+          } else {
+            currentPO.items[idx][field] = target.value;
+          }
+          const tr = target.closest('tr');
+          const item = currentPO.items[idx];
+          const lineBase = item.quantity * item.unitPrice;
+          const lineTax = lineBase * (item.taxRate / 100);
+          const totalTd = tr.querySelector('td:nth-last-child(2)');
+          if (totalTd) {
+            totalTd.textContent = formatCurrency(lineBase + lineTax);
+          }
+          recalculateTotals();
+        }
+      });
+
+      // Line item removal
+      document.getElementById('lineItemsBody').addEventListener('click', (e) => {
+        const btn = e.target.closest('.remove-row-btn');
+        if (btn) {
+          const idx = parseInt(btn.dataset.idx, 10);
+          if (!isNaN(idx) && currentPO.items.length > 1) {
+            currentPO.items.splice(idx, 1);
+            renderLineItems();
+            showToast("Item row removed.");
+          } else {
+            showToast("PO must contain at least one line item.", "error");
+          }
+        }
+      });
+
+      // Add Row
+      document.getElementById('addRowBtn').addEventListener('click', () => {
+        currentPO.items.push({
+          description: "New Item Description",
+          sku: "ITEM-" + Math.floor(100 + Math.random() * 900),
+          quantity: 1,
+          unitPrice: 0.00,
+          taxRate: 0.0
+        });
+        renderLineItems();
+        showToast("Added new line item row.");
+      });
+
+      // Recalculations
+      ['shippingInput', 'discountInput'].forEach(id => {
+        document.getElementById(id).addEventListener('input', recalculateTotals);
+      });
+      document.getElementById('currencySelect').addEventListener('change', () => {
+        renderLineItems();
+      });
+
+      // Actions
+      document.getElementById('clearExtractedPoBtn').addEventListener('click', clearExtractedPO);
+      document.getElementById('exportJsonBtn').addEventListener('click', exportToJSON);
+      document.getElementById('exportCsvBtn').addEventListener('click', exportToCSV);
+      document.getElementById('savePoBtn').addEventListener('click', savePOToHistory);
+      document.getElementById('printPoBtn').addEventListener('click', () => window.print());
+
+      // API Settings Modal
+      const apiModal = document.getElementById('apiModal');
+      document.getElementById('openApiSettingsBtn').addEventListener('click', async () => {
+        apiModal.classList.remove('hidden');
+        const key = document.getElementById('customApiKeyInput').value.trim();
+        if (key) {
+          try {
+            const models = await fetchAvailableGeminiModels(key);
+            if (models.length > 0) {
+              populateGeminiModelDropdown(models, localStorage.getItem('gemini_model'));
+            }
+          } catch (e) {
+            // Silently ignore background lookup
+          }
+        }
+      });
+      document.getElementById('closeApiModalBtn').addEventListener('click', () => apiModal.classList.add('hidden'));
+
+      const toggleVis = (btnId, inputId) => {
+        const btn = document.getElementById(btnId);
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+          const input = document.getElementById(inputId);
+          if (input.type === 'password') {
+            input.type = 'text';
+            btn.innerHTML = `<i data-lucide="eye-off" class="w-3.5 h-3.5"></i>`;
+          } else {
+            input.type = 'password';
+            btn.innerHTML = `<i data-lucide="eye" class="w-3.5 h-3.5"></i>`;
+          }
+          lucide.createIcons();
+        });
+      };
+      toggleVis('toggleGeminiKeyVisBtn', 'customApiKeyInput');
+      toggleVis('toggleOcrKeyVisBtn', 'customOcrApiKeyInput');
+
+      document.getElementById('saveApiKeyBtn').addEventListener('click', () => {
+        const geminiVal = document.getElementById('customApiKeyInput').value.trim();
+        const geminiModel = document.getElementById('geminiModelSelect')?.value || 'gemini-1.5-flash';
+        const ocrVal = document.getElementById('customOcrApiKeyInput').value.trim();
+        const ocrProv = document.getElementById('ocrProviderSelect').value;
+        const ocrEnd = document.getElementById('customOcrEndpointInput').value.trim();
+
+        customApiKey = geminiVal;
+        customOcrApiKey = ocrVal;
+        customOcrProvider = ocrProv;
+        customOcrEndpoint = ocrEnd;
+
+        if (geminiVal) localStorage.setItem('gemini_user_api_key', geminiVal);
+        else localStorage.removeItem('gemini_user_api_key');
+
+        localStorage.setItem('gemini_model', geminiModel);
+
+        if (ocrVal) localStorage.setItem('ocr_user_api_key', ocrVal);
+        else localStorage.removeItem('ocr_user_api_key');
+
+        localStorage.setItem('ocr_provider', ocrProv);
+        if (ocrEnd) localStorage.setItem('ocr_endpoint', ocrEnd);
+        else localStorage.removeItem('ocr_endpoint');
+
+        showToast("API Configuration saved.");
+        apiModal.classList.add('hidden');
+      });
+
+      document.getElementById('testApiKeyBtn').addEventListener('click', async () => {
+        const statusMsg = document.getElementById('apiStatusMessage');
+        statusMsg.textContent = "Connecting to Google AI Studio...";
+        statusMsg.className = "text-[11px] text-amber-600";
+
+        const key = document.getElementById('customApiKeyInput').value.trim();
+        if (!key) {
+          statusMsg.textContent = "Please enter an API Key first";
+          statusMsg.className = "text-[11px] text-rose-600";
+          return;
+        }
+
+        try {
+          statusMsg.textContent = "Listing authorized models for your key...";
+          let availableModels = await fetchAvailableGeminiModels(key);
+
+          // Filter out retired/deprecated models (including 2.5)
+          availableModels = availableModels.filter(m => !m.includes('2.5') && !m.includes('3-flash-preview'));
+
+          if (!availableModels || availableModels.length === 0) {
+            availableModels = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+          }
+
+          let preferred = localStorage.getItem('gemini_model');
+          if (preferred && (preferred.includes('2.5') || preferred.includes('3-flash-preview'))) {
+            localStorage.removeItem('gemini_model');
+            preferred = null;
+          }
+
+          const chosenModel = populateGeminiModelDropdown(availableModels, preferred);
+          const testQueue = [chosenModel, ...availableModels.filter(m => m !== chosenModel)];
+          let verifiedModel = null;
+          let lastPingErr = null;
+
+          for (const modelToPing of testQueue) {
+            const cleanModel = modelToPing.replace(/^models\//, '');
+            statusMsg.textContent = `Verifying model (${cleanModel})...`;
+
+            try {
+              const pingRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${key}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] })
+              });
+
+              if (pingRes.ok) {
+                verifiedModel = cleanModel;
+                break;
+              }
+
+              const errData = await pingRes.json().catch(() => ({}));
+              const errMsg = errData?.error?.message || `Ping failed: HTTP ${pingRes.status}`;
+              lastPingErr = errMsg;
+
+              const isUnavailable = pingRes.status === 404 || pingRes.status === 410 ||
+                (pingRes.status === 400 && (
+                  errMsg.includes('no longer available') ||
+                  errMsg.includes('not found') ||
+                  errMsg.includes('not supported') ||
+                  errMsg.includes('is deprecated') ||
+                  errMsg.includes('Interactions API')
+                ));
+
+              if (isUnavailable) {
+                console.warn(`Model ${cleanModel} is unavailable (${errMsg}), testing next model in list...`);
+                continue;
+              }
+
+              if (pingRes.status === 400 && (errMsg.includes('API key not valid') || errMsg.includes('API_KEY_INVALID'))) {
+                throw new Error("API Key is not valid. Please check your Google AI Studio key.");
+              }
+              if (pingRes.status === 403) {
+                throw new Error(errMsg || "Permission denied for this API key.");
+              }
+            } catch (pingFetchErr) {
+              if (pingFetchErr.message.includes('API Key is not valid') || pingFetchErr.message.includes('Permission denied')) {
+                throw pingFetchErr;
+              }
+              lastPingErr = pingFetchErr.message;
+            }
+          }
+
+          if (verifiedModel) {
+            localStorage.setItem('gemini_model', verifiedModel);
+            const selectEl = document.getElementById('geminiModelSelect');
+            if (selectEl) selectEl.value = verifiedModel;
+            statusMsg.textContent = `Verified Active (${verifiedModel}) • Ready`;
+            statusMsg.className = "text-[11px] text-emerald-600 font-medium";
+            showToast(`API Key verified! Active model: ${verifiedModel}`, 'success');
+          } else {
+            throw new Error(lastPingErr || "Could not verify any Gemini model with this API key.");
+          }
+        } catch (err) {
+          console.error("Gemini API Verification Error:", err);
+          statusMsg.textContent = `Error: ${err.message}`;
+          statusMsg.className = "text-[11px] text-rose-600";
+        }
+      });
+
+      document.getElementById('testOcrKeyBtn').addEventListener('click', async () => {
+        const statusMsg = document.getElementById('ocrStatusMessage');
+        statusMsg.textContent = "Testing OCR configuration...";
+        statusMsg.className = "text-[11px] text-amber-600";
+
+        const prov = document.getElementById('ocrProviderSelect').value;
+        const key = document.getElementById('customOcrApiKeyInput').value.trim();
+        const endpoint = document.getElementById('customOcrEndpointInput').value.trim();
+
+        if (prov === 'browser_tesseract') {
+          if (typeof Tesseract !== 'undefined') {
+            statusMsg.textContent = "Built-in Browser OCR Ready (v5)";
+            statusMsg.className = "text-[11px] text-emerald-600 font-medium";
+            showToast("Built-in Browser OCR is active and ready!", "success");
+          } else {
+            statusMsg.textContent = "Loading Tesseract engine...";
+            statusMsg.className = "text-[11px] text-amber-600";
+          }
+          return;
+        }
+
+        try {
+          // Call Server OCR test endpoint to avoid browser CORS blocks
+          const res = await fetch('/api/ocr/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              provider: prov,
+              endpoint: endpoint,
+              apiKey: key
+            })
+          });
+
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.success) {
+            statusMsg.textContent = `Verified: ${data.message || 'Connected'}`;
+            statusMsg.className = "text-[11px] text-emerald-600 font-medium";
+            showToast(`OCR Engine Connected: ${data.message || 'OK'}`, "success");
+          } else {
+            statusMsg.textContent = `Error: ${data.error || `HTTP ${res.status}`}`;
+            statusMsg.className = "text-[11px] text-rose-600";
+          }
+        } catch (err) {
+          console.warn("OCR test failed:", err);
+          statusMsg.textContent = `Unreachable: ${err.message}`;
+          statusMsg.className = "text-[11px] text-rose-600";
+        }
+      });
+
+      // History drawer
+      const drawer = document.getElementById('historyDrawer');
+      const backdrop = document.getElementById('drawerBackdrop');
+
+      document.getElementById('toggleHistoryBtn').addEventListener('click', () => {
+        drawer.classList.remove('translate-x-full');
+        backdrop.classList.remove('hidden');
+      });
+
+      const closeHistory = () => {
+        drawer.classList.add('translate-x-full');
+        backdrop.classList.add('hidden');
+      };
+
+      document.getElementById('closeHistoryBtn').addEventListener('click', closeHistory);
+      backdrop.addEventListener('click', closeHistory);
+
+      document.getElementById('clearHistoryBtn').addEventListener('click', () => {
+        poHistory = [];
+        updateHistoryUI();
+        showToast("History cleared.");
+      });
+    });
+  </script>
+</body>
+
+</html>

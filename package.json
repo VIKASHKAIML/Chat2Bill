@@ -5,10 +5,14 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "node test_voice_suite.js"
   },
   "dependencies": {
-    "express": "^4.19.2"
+    "dotenv": "^18.0.5",
+    "express": "^4.19.2",
+    "groq-sdk": "^1.6.0",
+    "multer": "^2.4.0"
   },
   "keywords": [
     "voice-billing",

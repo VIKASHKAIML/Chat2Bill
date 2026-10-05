@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Voice Billing Web Application for retail and grocery businesses.">
-  <title>Voice Billing System</title>
+  <meta name="description" content="Smart Voice Billing Web Application powered by Groq Whisper Large V3.">
+  <title>Voice Billing System - Groq Whisper Large V3</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,26 +14,74 @@
         <div class="brand-logo" aria-hidden="true">₹</div>
         <div>
           <h1>Voice Billing System</h1>
-          <p class="brand-subtitle">Smart Retail Pos &amp; Voice Order Entry</p>
+          <p class="brand-subtitle">Powered by Groq Whisper Large V3 &amp; Live Voice POS</p>
         </div>
       </div>
-      <div class="system-status" id="systemStatusBadge" aria-live="polite">
-        <span class="status-indicator"></span> System Ready
+      <div class="header-actions">
+        <!-- Unified Navigation Link to SmartPO Studio -->
+        <a href="/smartpo" class="nav-tab-link" title="Open SmartPO Studio - Multi-Image AI PO Extractor">
+          <span>📄 SmartPO Studio</span>
+          <span class="nav-badge-pill">AI OCR</span>
+        </a>
+
+        <div class="system-status" id="systemStatusBadge" aria-live="polite">
+          <span class="status-indicator ready" id="statusDot"></span>
+          <span id="systemStatusText">Groq Whisper V3 Ready</span>
+        </div>
+        <button type="button" id="apiKeyConfigBtn" class="btn-config" title="Configure Groq API Key">
+          🔑 Groq Key
+        </button>
       </div>
     </div>
   </header>
 
   <main class="main-wrapper">
+    <!-- PO Import Notification Banner -->
+    <div id="importBanner" class="import-banner hidden" role="alert">
+      <div class="import-banner-content">
+        <span class="import-icon">📥</span>
+        <div class="import-text-wrap">
+          <strong id="importBannerTitle">Purchase Order Items Imported!</strong>
+          <span id="importBannerDesc">Line items from PO were loaded into your current bill.</span>
+        </div>
+      </div>
+      <button type="button" id="dismissImportBanner" class="close-import-btn" aria-label="Dismiss banner">&times;</button>
+    </div>
+
     <div class="dashboard-grid">
       
       <!-- LEFT PANEL: VOICE RECOGNITION -->
       <section class="card voice-panel" aria-labelledby="voice-panel-heading">
         <div class="panel-header">
-          <h2 id="voice-panel-heading">Speak your items</h2>
-          <span class="badge" id="languageBadge">Language: हिन्दी (hi-IN)</span>
+          <h2 id="voice-panel-heading">Live Voice Input</h2>
+          <div class="engine-badge-wrap">
+            <span class="badge" id="engineBadge">🌐 Live Browser Speech</span>
+          </div>
         </div>
+
+        <!-- Engine & Language Bar -->
+        <div class="voice-controls-bar">
+          <div class="control-group">
+            <label for="speechEngineSelect">Engine:</label>
+            <select id="speechEngineSelect" class="form-select-sm">
+              <option value="browser" selected>🌐 Live Browser Speech (Instant Streaming)</option>
+              <option value="groq">⚡ Groq Whisper Large V3 (Cloud AI)</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label for="languageSelect">Language:</label>
+            <select id="languageSelect" class="form-select-sm">
+              <option value="hinglish" selected>Indian Hinglish</option>
+              <option value="hi">हिन्दी (Hindi)</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+        </div>
+
         <p class="panel-desc">
-          Tell me what the customer bought. Example: <em>&ldquo;2 Maggi 15 each, 3 Pepsi 40 each&rdquo;</em>
+          Speak items naturally in Hindi, Hinglish, or English. Bill updates <strong>live</strong> in real-time.
+          <br>
+          <em>Example: &ldquo;2 pcs laptop 3000 rupees 5 kg aloo 200 rupaye sawa kilo pyaz 100 rupees&rdquo;</em>
         </p>
 
         <!-- Mic Button Area -->
@@ -51,32 +99,56 @@
               <line x1="8" y1="22" x2="16" y2="22"></line>
             </svg>
           </button>
-          <p class="mic-status-text" id="micStatusText" aria-live="polite">Ready. Tap the microphone.</p>
+
+          <!-- Audio Waveform Visualizer & Timer -->
+          <div class="audio-wave hidden" id="audioWaveVisualizer" aria-hidden="true">
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+            <span class="wave-bar"></span>
+          </div>
+
+          <div class="mic-status-wrapper">
+            <p class="mic-status-text" id="micStatusText" aria-live="polite">Ready. Tap microphone to speak.</p>
+            <span class="record-timer hidden" id="recordTimer">00:00</span>
+          </div>
         </div>
 
         <!-- Transcript input -->
         <div class="transcript-group">
           <div class="transcript-header-flex">
-            <label for="transcriptInput" class="form-label">Transcript (you can edit it)</label>
-            <button type="button" id="toggleLangButton" class="link-btn" title="Toggle language">Switch to English</button>
+            <label for="transcriptInput" class="form-label">
+              Live Transcript <span class="transcript-meta" id="transcriptMeta"></span>
+            </label>
+            <button type="button" id="clearTextButton" class="link-btn" title="Clear text box">Clear</button>
           </div>
           <textarea 
             id="transcriptInput" 
             class="transcript-box" 
             rows="4" 
-            placeholder="Your spoken words appear here... You can edit directly before adding to bill."></textarea>
+            placeholder="Speak or type items here (e.g. 2 pcs laptop 3000 rupees 5 kg aloo 200 rupaye sawa kilo pyaz 100 rupees)... Bill updates live!"></textarea>
         </div>
 
         <!-- Voice actions -->
         <div class="voice-actions">
           <button type="button" id="addToBillButton" class="btn btn-primary">Add to bill</button>
           <button type="button" id="stopButton" class="btn btn-secondary">Stop</button>
-          <button type="button" id="clearTextButton" class="btn btn-secondary">Clear text</button>
+          <button type="button" id="testSampleBtn" class="btn btn-outline-sm" title="Try sample voice inputs">
+            Test Sample
+          </button>
         </div>
 
-        <p class="helper-text">
-          <span aria-hidden="true">ℹ</span> Basic parser (no AI): please verify every item before billing.
-        </p>
+        <div class="helper-info-card">
+          <div class="helper-info-title">💡 Live Voice Formats:</div>
+          <ul class="helper-info-list">
+            <li><strong>Continuous Speech:</strong> &ldquo;2 pcs laptop 3000 rupees 5 kg aloo 200 rupaye sawa kilo pyaz 100 rupees&rdquo;</li>
+            <li><strong>Indian Fractions:</strong> sawa kilo (1.25 kg), pauna kilo (0.75 kg), aadha kilo (0.5 kg), dedh kilo (1.5 kg)</li>
+            <li><strong>Indian Prices &amp; Lakh:</strong> 200 rupaye, 5000 rupees, 1.5 lakh rupees, ₹500, Rs 500</li>
+            <li><strong>Update Quantity/Price:</strong> &ldquo;aloo quantity 10 kg kar do&rdquo;, &ldquo;laptop price 3200 kar do&rdquo;</li>
+            <li><strong>Delete / Remove:</strong> &ldquo;aloo hata do&rdquo;, &ldquo;laptop delete&rdquo;, &ldquo;remove mouse&rdquo;</li>
+          </ul>
+        </div>
       </section>
 
       <!-- RIGHT PANEL: CURRENT BILL -->
@@ -93,6 +165,7 @@
               <tr>
                 <th scope="col" style="min-width: 140px;">Item</th>
                 <th scope="col" style="min-width: 110px;">Qty</th>
+                <th scope="col" style="min-width: 80px;">Unit</th>
                 <th scope="col" style="min-width: 90px;">Price ₹</th>
                 <th scope="col" style="min-width: 75px;">Disc %</th>
                 <th scope="col" style="min-width: 75px;">Tax %</th>
@@ -118,39 +191,70 @@
           </div>
         </div>
 
-        <!-- Summary box -->
-        <div class="bill-summary">
-          <div class="summary-line">
+        <!-- Bill Summary & Calculation breakdown -->
+        <div class="summary-container" aria-label="Bill total summary breakdown">
+          <div class="summary-row">
             <span>Subtotal</span>
             <span id="summarySubtotal">₹0.00</span>
           </div>
-          <div class="summary-line">
+          <div class="summary-row">
             <span>Discount</span>
             <span id="summaryDiscount" class="text-danger">-₹0.00</span>
           </div>
-          <div class="summary-line">
-            <span>Taxable amount</span>
+          <div class="summary-row">
+            <span>Taxable Amount</span>
             <span id="summaryTaxable">₹0.00</span>
           </div>
-          <div class="summary-line">
+          <div class="summary-row">
             <span>Tax</span>
             <span id="summaryTax">₹0.00</span>
           </div>
-          <div class="summary-line summary-grand-total">
-            <span>Grand total</span>
+          <div class="summary-row total-row">
+            <span>Grand Total</span>
             <span id="summaryGrandTotal">₹0.00</span>
           </div>
         </div>
 
-        <!-- Bill Action Controls -->
-        <div class="bill-actions">
-          <button type="button" id="generateBillButton" class="btn btn-primary btn-large">Generate bill</button>
+        <!-- Action buttons -->
+        <div class="bill-footer-actions">
+          <button type="button" id="generateBillButton" class="btn btn-primary btn-large">Generate invoice</button>
           <button type="button" id="clearBillButton" class="btn btn-danger-outline">Clear bill</button>
         </div>
       </section>
 
     </div>
   </main>
+
+  <!-- GROQ API KEY CONFIG MODAL -->
+  <div class="modal-overlay" id="apiKeyModal" role="dialog" aria-modal="true" aria-labelledby="modalApiKeyTitle" hidden>
+    <div class="modal-card modal-sm">
+      <div class="modal-header">
+        <h3 id="modalApiKeyTitle">⚡ Groq Whisper Large V3 Settings</h3>
+        <button type="button" id="closeApiKeyModalBtn" class="close-modal" aria-label="Close settings">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 12px; font-size: 0.9rem; color: var(--muted-text);">
+          You can configure your Groq API key in your server's <code>.env</code> file or enter it below to store in this browser.
+        </p>
+        <div class="form-group">
+          <label for="groqApiKeyInput" class="form-label">Groq API Key (<code>gsk_...</code>):</label>
+          <input 
+            type="password" 
+            id="groqApiKeyInput" 
+            class="table-input" 
+            placeholder="gsk_xxxxxxxxxxxxxxxxxxxxxxxxx"
+            autocomplete="off">
+        </div>
+        <p class="helper-text" style="margin-top: 8px;">
+          Need a key? Get one free at <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a>
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="saveApiKeyBtn">Save &amp; Test</button>
+        <button type="button" class="btn btn-secondary" id="cancelApiKeyBtn">Cancel</button>
+      </div>
+    </div>
+  </div>
 
   <!-- GENERATED INVOICE MODAL -->
   <div class="modal-overlay" id="invoiceModal" role="dialog" aria-modal="true" aria-labelledby="modalInvoiceTitle" hidden>
@@ -169,6 +273,9 @@
     </div>
   </div>
 
+  <!-- Shared Universal Parser Script -->
+  <script src="parser.js"></script>
+  <!-- Frontend Controller -->
   <script src="script.js"></script>
 </body>
 </html>
