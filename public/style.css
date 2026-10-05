@@ -75,6 +75,21 @@ body {
   font-weight: 700;
 }
 
+.brand-logo-img {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  object-fit: cover;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.2);
+  display: block;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.brand-logo-img:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
 .app-header h1 {
   font-size: 1.25rem;
   font-weight: 700;

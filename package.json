@@ -1,7 +1,7 @@
 {
-  "name": "voice-billing-app",
+  "name": "chat2bill",
   "version": "1.0.0",
-  "description": "A responsive voice-based billing web application for retail and grocery stores using Web Speech API and Express.js.",
+  "description": "Chat2Bill - Smart AI Voice Billing and Purchase Order System for retail stores.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

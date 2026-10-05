@@ -4,7 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SmartPO Studio - Multi-Image AI & Heuristic Purchase Order Extractor</title>
+  <title>Chat2Bill SmartPO - Multi-Image AI PO Extractor</title>
+  <link rel="icon" type="image/png" href="logo.png">
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Google Fonts: Inter & JetBrains Mono -->
@@ -92,13 +93,13 @@
   <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm backdrop-blur-md bg-white/95">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       <div class="flex items-center space-x-3 sm:space-x-4">
-        <div
-          class="h-10 w-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20 shrink-0">
-          <i data-lucide="file-spreadsheet" class="w-5 h-5"></i>
-        </div>
+        <a href="/" title="Chat2Bill Home" class="shrink-0 transition-transform hover:scale-105">
+          <img src="logo.png" alt="Chat2Bill Logo"
+            class="h-10 w-10 rounded-xl object-cover shadow-md shadow-brand-500/20 shrink-0 border border-slate-100">
+        </a>
         <div>
           <div class="flex items-center gap-2">
-            <h1 class="text-lg font-bold text-slate-900 tracking-tight">SmartPO Studio</h1>
+            <h1 class="text-lg font-bold text-slate-900 tracking-tight">Chat2Bill</h1>
             <span id="headerEngineBadge"
               class="px-2 py-0.5 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full flex items-center gap-1">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -116,10 +117,11 @@
         <!-- Switch to Voice Billing POS -->
         <a href="/"
           class="px-3 py-1.5 text-xs sm:text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition-all flex items-center gap-1.5 shadow-xs"
-          title="Switch to Live Voice Billing System">
+          title="Switch to Chat2Bill Voice POS">
           <i data-lucide="mic" class="w-4 h-4 text-emerald-600"></i>
           <span>Voice POS</span>
-          <span class="hidden md:inline text-[10px] bg-emerald-200 text-emerald-800 px-1.5 py-0.2 rounded font-mono">LIVE</span>
+          <span
+            class="hidden md:inline text-[10px] bg-emerald-200 text-emerald-800 px-1.5 py-0.2 rounded font-mono">LIVE</span>
         </a>
 
         <button id="openApiSettingsBtn"
@@ -550,18 +552,21 @@
               <label class="block text-[11px] font-semibold text-slate-600 mb-1">OCR Model / Provider</label>
               <select id="ocrProviderSelect"
                 class="w-full text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-brand-500 font-medium cursor-pointer">
-                <option value="browser_tesseract" selected>Built-in Browser OCR (Tesseract.js - Free &amp; Offline)</option>
+                <option value="browser_tesseract" selected>Built-in Browser OCR (Tesseract.js - Free &amp; Offline)
+                </option>
                 <option value="docker_jina">Docker AI / Ollama Jina OCR (http://localhost:11434/...)</option>
                 <option value="docker_8000">Docker Local vLLM (http://localhost:8000/...)</option>
                 <option value="jina_cloud">Official Jina AI Cloud (https://api.jina.ai/...)</option>
                 <option value="hf_jina">HuggingFace Inference (https://router.huggingface.co/...)</option>
                 <option value="ocrspace">OCR.space Cloud API (https://api.ocr.space/...)</option>
               </select>
-              <p id="ocrProviderHint" class="text-[10px] text-slate-500 mt-1">⚡ Zero-setup offline OCR using WebAssembly right in your browser.</p>
+              <p id="ocrProviderHint" class="text-[10px] text-slate-500 mt-1">⚡ Zero-setup offline OCR using WebAssembly
+                right in your browser.</p>
             </div>
             <div>
               <label class="block text-[11px] font-semibold text-slate-600 mb-1">OCR Endpoint URL</label>
-              <input type="text" id="customOcrEndpointInput" placeholder="Client-side WebAssembly (No endpoint required)"
+              <input type="text" id="customOcrEndpointInput"
+                placeholder="Client-side WebAssembly (No endpoint required)"
                 class="w-full text-xs font-mono bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-brand-500 disabled:bg-slate-100 disabled:text-slate-500"
                 value="Client-side WebAssembly (No endpoint required)" disabled />
             </div>
@@ -1198,12 +1203,12 @@ No Shipping fees.`,
       let target = (cleanPreferred && activeList.includes(cleanPreferred)) ? cleanPreferred : null;
       if (!target) {
         target = activeList.find(m => m === 'gemini-1.5-flash') ||
-                 activeList.find(m => m === 'gemini-1.5-flash-latest') ||
-                 activeList.find(m => m.includes('1.5-flash') && !m.includes('8b')) ||
-                 activeList.find(m => m.includes('2.0-flash')) ||
-                 activeList.find(m => m.includes('flash')) ||
-                 activeList.find(m => m.includes('1.5-pro')) ||
-                 activeList[0];
+          activeList.find(m => m === 'gemini-1.5-flash-latest') ||
+          activeList.find(m => m.includes('1.5-flash') && !m.includes('8b')) ||
+          activeList.find(m => m.includes('2.0-flash')) ||
+          activeList.find(m => m.includes('flash')) ||
+          activeList.find(m => m.includes('1.5-pro')) ||
+          activeList[0];
       }
 
       if (target) {
@@ -2003,8 +2008,8 @@ ${rawText || "Please inspect the attached PO image(s)."}
                 if (apiRes.success && apiRes.data) {
                   extractedResult = apiRes.data;
                   if (apiRes.provider === 'gemini') {
-                    usedEngine = queuedImages.length > 1 
-                      ? `Gemini AI (${apiRes.model}, ${queuedImages.length} Images Batch)` 
+                    usedEngine = queuedImages.length > 1
+                      ? `Gemini AI (${apiRes.model}, ${queuedImages.length} Images Batch)`
                       : `Gemini AI (${apiRes.model})`;
                   } else if (apiRes.provider === 'groq') {
                     usedEngine = `Groq LLM (${apiRes.model})`;

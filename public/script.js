@@ -1376,6 +1376,10 @@ document.addEventListener('DOMContentLoaded', () => {
         invoiceReceiptContent.innerHTML = `
             <div class="receipt">
                 <div class="receipt-head">
+                    <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:6px;">
+                        <img src="logo.png" alt="Chat2Bill" style="width:28px; height:28px; border-radius:6px; object-fit:cover;">
+                        <span style="font-weight:700; font-size:1.15rem; color:#1e293b; letter-spacing:-0.02em;">Chat2Bill</span>
+                    </div>
                     <h4>RETAIL STORE TAX INVOICE</h4>
                     <p style="font-size: 0.8rem; color: var(--muted-text);">Thank you for shopping with us!</p>
                 </div>
