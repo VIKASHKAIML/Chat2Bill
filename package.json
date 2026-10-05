@@ -6,9 +6,13 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node test_voice_suite.js"
+    "dev:backend": "node --watch backend/server.js",
+    "dev:frontend": "npx -y serve -p 3000 frontend",
+    "test": "node test_voice_suite.js",
+    "test:backend": "node backend/test_voice_suite.js"
   },
   "dependencies": {
+    "cors": "^2.8.6",
     "dotenv": "^18.0.5",
     "express": "^4.19.2",
     "groq-sdk": "^1.6.0",

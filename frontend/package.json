@@ -1,0 +1,17 @@
+{
+  "name": "chat2bill-frontend",
+  "version": "1.0.0",
+  "description": "Chat2Bill Frontend UI - AI Voice Billing POS and Smart Purchase Order Studio",
+  "scripts": {
+    "start": "npx -y serve -p 3000 .",
+    "dev": "npx -y serve -p 3000 ."
+  },
+  "keywords": [
+    "chat2bill",
+    "voice-billing",
+    "frontend-ui",
+    "smartpo"
+  ],
+  "author": "Chat2Bill Team",
+  "license": "MIT"
+}

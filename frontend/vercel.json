@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "routes": [
+    {
+      "src": "/smartpo",
+      "dest": "/smartpo.html"
+    },
+    {
+      "src": "/po",
+      "dest": "/smartpo.html"
+    },
+    {
+      "src": "/voice",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
+  ]
+}
