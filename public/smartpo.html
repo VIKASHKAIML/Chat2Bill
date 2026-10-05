@@ -1024,15 +1024,16 @@ No Shipping fees.`,
     }
 
     // Local heuristic parser
-    function parseWithLocalHeuristics(text) {
-      const clean = text.replace(/\r\n/g, '\n');
+    function parseWithLocalHeuristics(text = '') {
+      const clean = String(text || '').replace(/\r\n/g, '\n');
 
-      const poNumMatch = clean.match(/(?:purchase\s*order|po|ref(?:\s*no)?)[#:\s]+([A-Za-z0-9_-]+)/i) ||
-        clean.match(/(?:PO-\d{4}-\w+)/i) ||
+      const poNumMatch = clean.match(/(?:purchase\s*order(?:\s*no|\s*number)?|po(?:\s*no|\s*#)?|order\s*#|invoice\s*#|ref(?:\s*no)?)[#:\s]+([A-Za-z0-9_\/-]+)/i) ||
+        clean.match(/\bPO[-_#]?([A-Za-z0-9-]+)\b/i) ||
         clean.match(/#([A-Za-z0-9_-]{4,})/);
-      const poNumber = poNumMatch ? poNumMatch[1] : `PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const poNumber = poNumMatch ? (poNumMatch[1] || poNumMatch[0]).replace(/^[#:\s]+/, '') : `PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-      const dateMatches = clean.match(/\b(20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})\b/g) || [];
+      const dateMatches = clean.match(/\b(20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})\b/g) ||
+                          clean.match(/\b(\d{1,2}[-/.]\d{1,2}[-/.]20\d{2})\b/g) || [];
       const issueDate = dateMatches[0] || new Date().toISOString().split('T')[0];
       const dueDate = dateMatches[1] || "";
 
@@ -1046,26 +1047,26 @@ No Shipping fees.`,
       else if (clean.includes("¥") || clean.includes("JPY")) currency = "¥";
 
       let vendor = { name: "Extracted Supplier", address: "", contact: "", taxId: "" };
-      const vendorSection = clean.match(/(?:vendor|supplier)[:\s]*([\s\S]*?)(?=(?:buyer|client|purchaser|line\s*items|items|deliverables|$))/i);
+      const vendorSection = clean.match(/(?:vendor|supplier|from|seller)[:\s]*([\s\S]*?)(?=(?:buyer|client|purchaser|bill\s*to|ship\s*to|line\s*items|items|deliverables|$))/i);
       if (vendorSection) {
         const lines = vendorSection[1].trim().split('\n').map(l => l.trim()).filter(l => l);
         if (lines.length > 0) vendor.name = lines[0].replace(/^[:\-#\s]+/, '');
         if (lines.length > 1) vendor.address = lines.slice(1, 3).join(', ');
-        const contactMatch = vendorSection[1].match(/(?:contact|email)[:\s]*([^\n\r]+)/i) || vendorSection[1].match(/[\w.-]+@[\w.-]+\.\w+/);
+        const contactMatch = vendorSection[1].match(/(?:contact|email|phone)[:\s]*([^\n\r]+)/i) || vendorSection[1].match(/[\w.-]+@[\w.-]+\.\w+/);
         if (contactMatch) vendor.contact = contactMatch[1] || contactMatch[0];
-        const taxMatch = vendorSection[1].match(/(?:tax\s*id|vat)[:\s]*([A-Za-z0-9-]+)/i);
+        const taxMatch = vendorSection[1].match(/(?:tax\s*id|vat|gstin|gst)[:\s]*([A-Za-z0-9-]+)/i);
         if (taxMatch) vendor.taxId = taxMatch[1];
       }
 
       let buyer = { name: "Extracted Buyer Organization", address: "", contact: "", taxId: "" };
-      const buyerSection = clean.match(/(?:buyer|client|purchaser|bill\s*to)[:\s]*([\s\S]*?)(?=(?:vendor|supplier|line\s*items|items|deliverables|$))/i);
+      const buyerSection = clean.match(/(?:buyer|client|purchaser|bill\s*to|invoice\s*to)[:\s]*([\s\S]*?)(?=(?:vendor|supplier|line\s*items|items|deliverables|ship\s*to|$))/i);
       if (buyerSection) {
         const lines = buyerSection[1].trim().split('\n').map(l => l.trim()).filter(l => l);
         if (lines.length > 0) buyer.name = lines[0].replace(/^[:\-#\s]+/, '');
         if (lines.length > 1) buyer.address = lines.slice(1, 3).join(', ');
-        const contactMatch = buyerSection[1].match(/(?:contact|attn|email)[:\s]*([^\n\r]+)/i) || buyerSection[1].match(/[\w.-]+@[\w.-]+\.\w+/);
+        const contactMatch = buyerSection[1].match(/(?:contact|attn|email|phone)[:\s]*([^\n\r]+)/i) || buyerSection[1].match(/[\w.-]+@[\w.-]+\.\w+/);
         if (contactMatch) buyer.contact = contactMatch[1] || contactMatch[0];
-        const taxMatch = buyerSection[1].match(/(?:tax\s*id|vat)[:\s]*([A-Za-z0-9-]+)/i);
+        const taxMatch = buyerSection[1].match(/(?:tax\s*id|vat|gstin|gst)[:\s]*([A-Za-z0-9-]+)/i);
         if (taxMatch) buyer.taxId = taxMatch[1];
       }
 
@@ -1078,51 +1079,104 @@ No Shipping fees.`,
 
       const items = [];
       const lines = clean.split('\n');
+      const headerSkipRegex = /^(item|description|qty|quantity|unit|price|rate|amount|total|subtotal|tax|discount|shipping|freight|notes|terms|payment|bank|authorized|sign|page\s*\d|po\s*box|date|vendor|buyer)/i;
 
       lines.forEach(line => {
-        if (/qty|rate|price|sku|@|tax/i.test(line) && /[\d]+/.test(line)) {
-          let desc = line;
-          let sku = "";
-          let qty = 1;
-          let unitPrice = 100.00;
-          let taxRate = 5.0;
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.length < 3) return;
+        if (/^(subtotal|total|grand\s*total|balance\s*due|amount\s*due|tax\s*total|thank\s*you)/i.test(trimmed)) return;
+        if (/^(item\s+desc|description\s+qty|sl\s*no|sr\s*no)/i.test(trimmed)) return;
 
-          const skuMatch = line.match(/(?:sku|code)[:\s]*([A-Za-z0-9_-]+)/i);
+        let desc = "";
+        let sku = "";
+        let qty = 1;
+        let unitPrice = 0;
+        let taxRate = 0;
+
+        // Explicit keywords: qty, rate, price, @, sku
+        if (/qty|rate|price|sku|@|tax/i.test(trimmed) && /\d+/.test(trimmed)) {
+          const skuMatch = trimmed.match(/(?:sku|code)[:\s]*([A-Za-z0-9_-]+)/i);
           if (skuMatch) sku = skuMatch[1];
 
-          const qtyMatch = line.match(/(?:qty|quantity)[:\s]*(\d+)/i) || line.match(/x\s*(\d+)/i);
+          const qtyMatch = trimmed.match(/(?:qty|quantity)[:\s]*(\d+)/i) || trimmed.match(/x\s*(\d+)/i);
           if (qtyMatch) qty = parseInt(qtyMatch[1], 10);
 
-          const priceMatch = line.match(/(?:unit\s*price|rate|@)?[:\s]*[$€£¥₹]?\s*([\d,]+\.\d{2})/i) || line.match(/[$€£¥₹]\s*([\d,]+\.?\d*)/);
+          const priceMatch = trimmed.match(/(?:unit\s*price|rate|@)?[:\s]*[$€£¥₹]?\s*([\d,]+\.\d{2})/i) || trimmed.match(/[$€£¥₹]\s*([\d,]+\.?\d*)/);
           if (priceMatch) unitPrice = parseFloat(priceMatch[1].replace(/,/g, ''));
 
-          const taxMatch = line.match(/tax[:\s]*(\d+(?:\.\d+)?)\s*%/i);
+          const taxMatch = trimmed.match(/tax[:\s]*(\d+(?:\.\d+)?)\s*%/i);
           if (taxMatch) taxRate = parseFloat(taxMatch[1]);
 
-          desc = line.replace(/^\d+[\.\-)]\s*/, '')
+          desc = trimmed.replace(/^\d+[\.\-)]\s*/, '')
             .replace(/^[•\-\*]\s*/, '')
             .split(/\||\(|@/)[0].trim();
-
-          if (desc && desc.length > 2 && !/^(total|subtotal|shipping|freight|charges)/i.test(desc)) {
-            items.push({
-              description: desc,
-              sku: sku || `ITM-${Math.floor(100 + Math.random() * 900)}`,
-              quantity: qty || 1,
-              unitPrice: unitPrice || 50.00,
-              taxRate: taxRate || 0.0
-            });
+        }
+        // Tabular or price row: e.g. "Item Name 2 45.00 90.00" or "Office Chair $250.00"
+        else if (/\d+/.test(trimmed)) {
+          const priceMatches = [...trimmed.matchAll(/[$€£¥₹]?\s*(\d{1,6}(?:,\d{3})*(?:\.\d{2}))/g)];
+          if (priceMatches.length > 0) {
+            const tokens = trimmed.split(/\s{2,}|\t|\|/).filter(t => t.trim());
+            if (tokens.length >= 2) {
+              desc = tokens[0].replace(/^\d+[\.\-)]\s*/, '').trim();
+              const numTokens = tokens.slice(1).map(t => parseFloat(t.replace(/[^0-9.]/g, ''))).filter(n => !isNaN(n));
+              if (numTokens.length === 1) {
+                unitPrice = numTokens[0];
+              } else if (numTokens.length >= 2) {
+                if (Number.isInteger(numTokens[0]) && numTokens[0] > 0 && numTokens[0] <= 1000) {
+                  qty = numTokens[0];
+                  unitPrice = numTokens[1];
+                } else {
+                  unitPrice = numTokens[0];
+                }
+              }
+            } else {
+              const lastPrice = parseFloat(priceMatches[0][1].replace(/,/g, ''));
+              unitPrice = lastPrice;
+              const textBeforePrice = trimmed.substring(0, priceMatches[0].index).trim();
+              const trailingQtyMatch = textBeforePrice.match(/\b(\d+)\s*$/);
+              if (trailingQtyMatch && parseInt(trailingQtyMatch[1], 10) > 0 && parseInt(trailingQtyMatch[1], 10) <= 500) {
+                qty = parseInt(trailingQtyMatch[1], 10);
+                desc = textBeforePrice.substring(0, trailingQtyMatch.index).trim();
+              } else {
+                desc = textBeforePrice;
+              }
+              desc = desc.replace(/^\d+[\.\-)]\s*/, '').trim();
+            }
           }
+        }
+
+        desc = desc.replace(/^[•\-\*#\d\.\s]+/, '').replace(/[\s\-_|:]+$/, '').trim();
+
+        if (desc && desc.length >= 2 && unitPrice > 0 && !headerSkipRegex.test(desc)) {
+          items.push({
+            description: desc,
+            sku: sku || `ITM-${Math.floor(100 + Math.random() * 900)}`,
+            quantity: qty || 1,
+            unitPrice: unitPrice || 50.00,
+            taxRate: taxRate || 0.0
+          });
         }
       });
 
-      if (items.length === 0) {
-        items.push({
-          description: "Procurement Items / Contract Deliverables",
-          sku: "GEN-001",
-          quantity: 1,
-          unitPrice: 500.00,
-          taxRate: 5.0
-        });
+      if (items.length === 0 && clean.trim().length > 0) {
+        const candidateLines = lines.map(l => l.trim()).filter(l => l.length > 5 && !headerSkipRegex.test(l));
+        if (candidateLines.length > 0) {
+          items.push({
+            description: candidateLines[0].substring(0, 80),
+            sku: "GEN-001",
+            quantity: 1,
+            unitPrice: 100.00,
+            taxRate: 5.0
+          });
+        } else {
+          items.push({
+            description: "Procurement Items / Deliverables",
+            sku: "GEN-001",
+            quantity: 1,
+            unitPrice: 100.00,
+            taxRate: 5.0
+          });
+        }
       }
 
       return {
@@ -1136,8 +1190,8 @@ No Shipping fees.`,
         items,
         shipping,
         discount,
-        confidenceRating: "Local Heuristics Verified",
-        notes: "Parsed through deterministic local pattern heuristics."
+        confidenceRating: "Deterministic Heuristics Engine",
+        notes: "Parsed through pattern heuristics and table column extraction."
       };
     }
 
@@ -1909,6 +1963,26 @@ ${rawText || "Please inspect the attached PO image(s)."}
         }
       });
 
+      // Paste support for screenshots directly into SmartPO
+      window.addEventListener('paste', (e) => {
+        const items = e.clipboardData?.items;
+        if (!items || items.length === 0) return;
+        const pastedFiles = [];
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.startsWith('image/')) {
+            const file = items[i].getAsFile();
+            if (file) {
+              const renamedFile = new File([file], `screenshot_po_${Date.now()}.png`, { type: file.type });
+              pastedFiles.push(renamedFile);
+            }
+          }
+        }
+        if (pastedFiles.length > 0) {
+          handleIncomingFiles(pastedFiles);
+          showToast(`Pasted ${pastedFiles.length} image from clipboard!`, "info");
+        }
+      });
+
       async function handleIncomingFiles(files) {
         if (!files || files.length === 0) return;
 
@@ -1921,15 +1995,15 @@ ${rawText || "Please inspect the attached PO image(s)."}
           if (exists) continue;
 
           if (file.type.startsWith('image/')) {
-            const base64Data = await readFileAsBase64(file);
+            const imgInfo = await readFileAsBase64(file);
             uploadedFilesQueue.push({
               id: Date.now() + Math.random(),
               name: file.name,
-              size: file.size,
-              type: file.type,
+              size: imgInfo.size || file.size,
+              type: imgInfo.mimeType || file.type,
               isImage: true,
-              mimeType: file.type,
-              data: base64Data
+              mimeType: imgInfo.mimeType || file.type,
+              data: imgInfo.data
             });
             addedCount++;
           } else {
@@ -1956,10 +2030,73 @@ ${rawText || "Please inspect the attached PO image(s)."}
         }
       }
 
-      function readFileAsBase64(file) {
+      // Read and compress image client-side to strictly adhere to Vercel's 4.5MB request limit
+      function readFileAsBase64(file, maxDimension = 1600, quality = 0.85) {
         return new Promise((resolve) => {
           const reader = new FileReader();
-          reader.onload = (e) => resolve(e.target.result.split(',')[1]);
+          reader.onerror = () => resolve({ data: '', mimeType: file.type || 'image/jpeg', size: 0 });
+          reader.onload = (e) => {
+            const dataUrl = e.target.result;
+            // Non-raster or non-image types
+            if (!file.type || !file.type.startsWith('image/') || file.type === 'image/svg+xml') {
+              const base64 = dataUrl.split(',')[1] || '';
+              return resolve({
+                data: base64,
+                mimeType: file.type || 'application/octet-stream',
+                size: file.size || Math.round((base64.length * 3) / 4)
+              });
+            }
+
+            const img = new Image();
+            img.onerror = () => {
+              const base64 = dataUrl.split(',')[1] || '';
+              resolve({
+                data: base64,
+                mimeType: file.type || 'image/jpeg',
+                size: file.size || Math.round((base64.length * 3) / 4)
+              });
+            };
+            img.onload = () => {
+              try {
+                let width = img.naturalWidth || img.width;
+                let height = img.naturalHeight || img.height;
+
+                if (width > maxDimension || height > maxDimension) {
+                  if (width > height) {
+                    height = Math.round((height * maxDimension) / width);
+                    width = maxDimension;
+                  } else {
+                    width = Math.round((width * maxDimension) / height);
+                    height = maxDimension;
+                  }
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, width, height);
+                ctx.drawImage(img, 0, 0, width, height);
+
+                const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+                const compressedBase64 = compressedDataUrl.split(',')[1] || '';
+                resolve({
+                  data: compressedBase64,
+                  mimeType: 'image/jpeg',
+                  size: Math.round((compressedBase64.length * 3) / 4)
+                });
+              } catch (canvasErr) {
+                const base64 = dataUrl.split(',')[1] || '';
+                resolve({
+                  data: base64,
+                  mimeType: file.type || 'image/jpeg',
+                  size: file.size || Math.round((base64.length * 3) / 4)
+                });
+              }
+            };
+            img.src = dataUrl;
+          };
           reader.readAsDataURL(file);
         });
       }
@@ -2002,8 +2139,11 @@ ${rawText || "Please inspect the attached PO image(s)."}
 
               for (let i = 0; i < queuedImages.length; i++) {
                 try {
+                  btnText.textContent = `OCR Scanning Image ${i + 1}/${queuedImages.length}...`;
                   const ocrText = await extractTextWithOCR(queuedImages[i], customOcrApiKey);
-                  aggregatedOcrText += `\n--- OCR Page/Image ${i + 1}: ${queuedImages[i].name} ---\n` + ocrText + "\n";
+                  if (ocrText && ocrText.trim()) {
+                    aggregatedOcrText += `\n--- OCR Page/Image ${i + 1}: ${queuedImages[i].name} ---\n` + ocrText.trim() + "\n";
+                  }
                 } catch (ocrErr) {
                   console.warn(`OCR error for ${queuedImages[i].name}:`, ocrErr.message);
                 }
@@ -2018,6 +2158,22 @@ ${rawText || "Please inspect the attached PO image(s)."}
 
           } else if (parserMode === 'local') {
             btnText.textContent = "Processing Local Engine...";
+            if (!rawText && queuedImages.length > 0) {
+              btnText.textContent = `Extracting Text from Images...`;
+              let aggregatedOcrText = "";
+              for (let i = 0; i < queuedImages.length; i++) {
+                try {
+                  const ocrText = await extractTextWithOCR(queuedImages[i], customOcrApiKey);
+                  if (ocrText && ocrText.trim()) {
+                    aggregatedOcrText += `\n--- OCR Image ${i + 1}: ${queuedImages[i].name} ---\n` + ocrText.trim() + "\n";
+                  }
+                } catch (ocrErr) {
+                  console.warn(`OCR error for ${queuedImages[i].name}:`, ocrErr.message);
+                }
+              }
+              document.getElementById('rawTextEditor').value = aggregatedOcrText.trim();
+              rawText = aggregatedOcrText.trim();
+            }
             extractedResult = parseWithLocalHeuristics(rawText);
             usedEngine = "Local Heuristics Engine";
 
@@ -2032,8 +2188,12 @@ ${rawText || "Please inspect the attached PO image(s)."}
                 selectedModel = 'gemini-1.5-flash';
               }
               const reqHeaders = { 'Content-Type': 'application/json' };
-              if (customApiKey) reqHeaders['x-gemini-api-key'] = customApiKey;
+              if (customApiKey) {
+                reqHeaders['x-gemini-api-key'] = customApiKey;
+                reqHeaders['Authorization'] = `Bearer ${customApiKey}`;
+              }
 
+              // 1. Try server extraction
               const res = await fetch('/api/extract-po', {
                 method: 'POST',
                 headers: reqHeaders,
@@ -2041,13 +2201,14 @@ ${rawText || "Please inspect the attached PO image(s)."}
                   rawText: rawText,
                   images: queuedImages,
                   model: selectedModel,
-                  parserMode: 'auto'
+                  parserMode: 'auto',
+                  geminiApiKey: customApiKey || undefined
                 })
               });
 
               if (res.ok) {
                 const apiRes = await res.json();
-                if (apiRes.success && apiRes.data) {
+                if (apiRes.success && apiRes.data && Array.isArray(apiRes.data.items) && apiRes.data.items.length > 0) {
                   extractedResult = apiRes.data;
                   if (apiRes.provider === 'gemini') {
                     usedEngine = queuedImages.length > 1
@@ -2060,26 +2221,87 @@ ${rawText || "Please inspect the attached PO image(s)."}
                   }
                 }
               }
+            } catch (serverErr) {
+              console.warn("Server-side extraction request failed:", serverErr.message);
+            }
 
-              if (!extractedResult) {
+            // 2. Client-side Gemini fallback if user provided custom API key in browser settings
+            if (!extractedResult && customApiKey) {
+              try {
+                btnText.textContent = "Connecting to Gemini AI Vision...";
                 extractedResult = await extractPOWithGemini(rawText, queuedImages);
-                usedEngine = `Gemini AI (${selectedModel})`;
+                usedEngine = `Gemini AI Direct (${selectedModel || 'gemini-1.5-flash'})`;
+              } catch (clientGeminiErr) {
+                console.warn("Client Gemini extraction failed:", clientGeminiErr.message);
               }
-            } catch (err) {
-              console.warn("AI extraction fallback to local heuristics:", err.message);
-              if (err.message.includes('429')) {
-                showToast("AI Rate Limit reached. Switched to Local Engine.", "info");
-                usedEngine = "Local Engine (Rate Limit Fallback)";
-              } else {
-                usedEngine = "High-Precision Local Engine";
+            }
+
+            // 3. Guaranteed OCR Fallback if images present and result not yet obtained
+            if (!extractedResult && queuedImages.length > 0) {
+              btnText.textContent = `Running OCR (${queuedImages.length} images)...`;
+              let aggregatedOcrText = rawText ? rawText + "\n\n" : "";
+
+              for (let i = 0; i < queuedImages.length; i++) {
+                try {
+                  btnText.textContent = `OCR Scanning Image ${i + 1}/${queuedImages.length}...`;
+                  const ocrText = await extractTextWithOCR(queuedImages[i], customOcrApiKey);
+                  if (ocrText && ocrText.trim()) {
+                    aggregatedOcrText += `\n--- OCR Page/Image ${i + 1}: ${queuedImages[i].name} ---\n` + ocrText.trim() + "\n";
+                  }
+                } catch (ocrErr) {
+                  console.warn(`OCR error for ${queuedImages[i].name}:`, ocrErr.message);
+                }
               }
+
+              if (aggregatedOcrText.trim()) {
+                document.getElementById('rawTextEditor').value = aggregatedOcrText.trim();
+                rawText = aggregatedOcrText.trim();
+                showToast("OCR text successfully recognized from image(s)!", "info");
+
+                // Try quick text-only AI extraction now that rawText is populated
+                try {
+                  btnText.textContent = "Parsing extracted text...";
+                  const textHeaders = { 'Content-Type': 'application/json' };
+                  if (customApiKey) {
+                    textHeaders['x-gemini-api-key'] = customApiKey;
+                    textHeaders['Authorization'] = `Bearer ${customApiKey}`;
+                  }
+                  const textRes = await fetch('/api/extract-po', {
+                    method: 'POST',
+                    headers: textHeaders,
+                    body: JSON.stringify({
+                      rawText: rawText,
+                      images: [],
+                      parserMode: 'auto',
+                      geminiApiKey: customApiKey || undefined
+                    })
+                  });
+                  if (textRes.ok) {
+                    const textApiRes = await textRes.json();
+                    if (textApiRes.success && textApiRes.data && Array.isArray(textApiRes.data.items) && textApiRes.data.items.length > 0) {
+                      extractedResult = textApiRes.data;
+                      usedEngine = textApiRes.provider === 'gemini' ? `Gemini AI via OCR (${textApiRes.model})` :
+                                   textApiRes.provider === 'groq' ? `Groq AI via OCR (${textApiRes.model})` :
+                                   `Cloud AI via OCR`;
+                    }
+                  }
+                } catch (textParseErr) {
+                  console.warn("Text AI parse attempt failed:", textParseErr.message);
+                }
+              }
+            }
+
+            // 4. Final Deterministic Parser Fallback
+            if (!extractedResult) {
+              btnText.textContent = "Processing Local Engine...";
               extractedResult = parseWithLocalHeuristics(rawText);
+              usedEngine = queuedImages.length > 0 ? `Built-in OCR + Smart Heuristics` : "Local Heuristic Engine";
             }
           }
 
           if (extractedResult) {
             currentPO = {
-              poNumber: extractedResult.poNumber || "PO-EXTRACTED",
+              poNumber: extractedResult.poNumber || `PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
               issueDate: extractedResult.issueDate || new Date().toISOString().split('T')[0],
               dueDate: extractedResult.dueDate || "",
               paymentTerms: extractedResult.paymentTerms || "Net 30",
@@ -2100,6 +2322,8 @@ ${rawText || "Please inspect the attached PO image(s)."}
 
             document.getElementById('activeEngineText').textContent = usedEngine;
             showToast(`Extracted ${currentPO.items.length} line items with ${usedEngine}!`, "success");
+          } else {
+            showToast("Could not extract PO data. Please verify image clarity or enter details.", "error");
           }
         } catch (globalErr) {
           console.error("Extraction error:", globalErr);

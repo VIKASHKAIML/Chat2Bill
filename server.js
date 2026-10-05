@@ -69,7 +69,9 @@ function getGroqClient(req) {
  * Helper: Get Google Gemini API key from header or .env
  */
 function getGeminiApiKey(req) {
-  const apiKey = (req && req.headers['x-gemini-api-key']) || process.env.GEMINI_API_KEY;
+  const apiKey = (req && req.headers && (req.headers['x-gemini-api-key'] || req.headers['authorization']?.replace(/^Bearer\s+/i, ''))) ||
+    (req && req.body && (req.body.geminiApiKey || req.body.apiKey)) ||
+    process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey.startsWith('AIzaSy_your_gemini') || apiKey.trim() === '') {
     return null;
   }
@@ -130,12 +132,13 @@ async function extractTextWithGeminiVision(image, apiKey) {
 function parseWithLocalHeuristics(text = '') {
   const clean = String(text).replace(/\r\n/g, '\n');
 
-  const poNumMatch = clean.match(/(?:purchase\s*order|po|ref(?:\s*no)?)[#:\s]+([A-Za-z0-9_-]+)/i) ||
-    clean.match(/(?:PO-\d{4}-\w+)/i) ||
+  const poNumMatch = clean.match(/(?:purchase\s*order(?:\s*no|\s*number)?|po(?:\s*no|\s*#)?|order\s*#|invoice\s*#|ref(?:\s*no)?)[#:\s]+([A-Za-z0-9_\/-]+)/i) ||
+    clean.match(/\bPO[-_#]?([A-Za-z0-9-]+)\b/i) ||
     clean.match(/#([A-Za-z0-9_-]{4,})/);
-  const poNumber = poNumMatch ? poNumMatch[1] : `PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const poNumber = poNumMatch ? (poNumMatch[1] || poNumMatch[0]).replace(/^[#:\s]+/, '') : `PO-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-  const dateMatches = clean.match(/\b(20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})\b/g) || [];
+  const dateMatches = clean.match(/\b(20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})\b/g) ||
+                      clean.match(/\b(\d{1,2}[-/.]\d{1,2}[-/.]20\d{2})\b/g) || [];
   const issueDate = dateMatches[0] || new Date().toISOString().split('T')[0];
   const dueDate = dateMatches[1] || "";
 
@@ -149,26 +152,26 @@ function parseWithLocalHeuristics(text = '') {
   else if (clean.includes("¥") || clean.includes("JPY")) currency = "¥";
 
   let vendor = { name: "Extracted Supplier", address: "", contact: "", taxId: "" };
-  const vendorSection = clean.match(/(?:vendor|supplier)[:\s]*([\s\S]*?)(?=(?:buyer|client|purchaser|line\s*items|items|deliverables|$))/i);
+  const vendorSection = clean.match(/(?:vendor|supplier|from|seller)[:\s]*([\s\S]*?)(?=(?:buyer|client|purchaser|bill\s*to|ship\s*to|line\s*items|items|deliverables|$))/i);
   if (vendorSection) {
     const lines = vendorSection[1].trim().split('\n').map(l => l.trim()).filter(l => l);
     if (lines.length > 0) vendor.name = lines[0].replace(/^[:\-#\s]+/, '');
     if (lines.length > 1) vendor.address = lines.slice(1, 3).join(', ');
-    const contactMatch = vendorSection[1].match(/(?:contact|email)[:\s]*([^\n\r]+)/i) || vendorSection[1].match(/[\w.-]+@[\w.-]+\.\w+/);
+    const contactMatch = vendorSection[1].match(/(?:contact|email|phone)[:\s]*([^\n\r]+)/i) || vendorSection[1].match(/[\w.-]+@[\w.-]+\.\w+/);
     if (contactMatch) vendor.contact = contactMatch[1] || contactMatch[0];
-    const taxMatch = vendorSection[1].match(/(?:tax\s*id|vat)[:\s]*([A-Za-z0-9-]+)/i);
+    const taxMatch = vendorSection[1].match(/(?:tax\s*id|vat|gstin|gst)[:\s]*([A-Za-z0-9-]+)/i);
     if (taxMatch) vendor.taxId = taxMatch[1];
   }
 
   let buyer = { name: "Extracted Buyer Organization", address: "", contact: "", taxId: "" };
-  const buyerSection = clean.match(/(?:buyer|client|purchaser|bill\s*to)[:\s]*([\s\S]*?)(?=(?:vendor|supplier|line\s*items|items|deliverables|$))/i);
+  const buyerSection = clean.match(/(?:buyer|client|purchaser|bill\s*to|invoice\s*to)[:\s]*([\s\S]*?)(?=(?:vendor|supplier|line\s*items|items|deliverables|ship\s*to|$))/i);
   if (buyerSection) {
     const lines = buyerSection[1].trim().split('\n').map(l => l.trim()).filter(l => l);
     if (lines.length > 0) buyer.name = lines[0].replace(/^[:\-#\s]+/, '');
     if (lines.length > 1) buyer.address = lines.slice(1, 3).join(', ');
-    const contactMatch = buyerSection[1].match(/(?:contact|attn|email)[:\s]*([^\n\r]+)/i) || buyerSection[1].match(/[\w.-]+@[\w.-]+\.\w+/);
+    const contactMatch = buyerSection[1].match(/(?:contact|attn|email|phone)[:\s]*([^\n\r]+)/i) || buyerSection[1].match(/[\w.-]+@[\w.-]+\.\w+/);
     if (contactMatch) buyer.contact = contactMatch[1] || contactMatch[0];
-    const taxMatch = buyerSection[1].match(/(?:tax\s*id|vat)[:\s]*([A-Za-z0-9-]+)/i);
+    const taxMatch = buyerSection[1].match(/(?:tax\s*id|vat|gstin|gst)[:\s]*([A-Za-z0-9-]+)/i);
     if (taxMatch) buyer.taxId = taxMatch[1];
   }
 
@@ -181,51 +184,104 @@ function parseWithLocalHeuristics(text = '') {
 
   const items = [];
   const lines = clean.split('\n');
+  const headerSkipRegex = /^(item|description|qty|quantity|unit|price|rate|amount|total|subtotal|tax|discount|shipping|freight|notes|terms|payment|bank|authorized|sign|page\s*\d|po\s*box|date|vendor|buyer)/i;
 
   lines.forEach(line => {
-    if (/qty|rate|price|sku|@|tax/i.test(line) && /[\d]+/.test(line)) {
-      let desc = line;
-      let sku = "";
-      let qty = 1;
-      let unitPrice = 100.00;
-      let taxRate = 5.0;
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.length < 3) return;
+    if (/^(subtotal|total|grand\s*total|balance\s*due|amount\s*due|tax\s*total|thank\s*you)/i.test(trimmed)) return;
+    if (/^(item\s+desc|description\s+qty|sl\s*no|sr\s*no)/i.test(trimmed)) return;
 
-      const skuMatch = line.match(/(?:sku|code)[:\s]*([A-Za-z0-9_-]+)/i);
+    let desc = "";
+    let sku = "";
+    let qty = 1;
+    let unitPrice = 0;
+    let taxRate = 0;
+
+    // Explicit keywords: qty, rate, price, @, sku
+    if (/qty|rate|price|sku|@|tax/i.test(trimmed) && /\d+/.test(trimmed)) {
+      const skuMatch = trimmed.match(/(?:sku|code)[:\s]*([A-Za-z0-9_-]+)/i);
       if (skuMatch) sku = skuMatch[1];
 
-      const qtyMatch = line.match(/(?:qty|quantity)[:\s]*(\d+)/i) || line.match(/x\s*(\d+)/i);
+      const qtyMatch = trimmed.match(/(?:qty|quantity)[:\s]*(\d+)/i) || trimmed.match(/x\s*(\d+)/i);
       if (qtyMatch) qty = parseInt(qtyMatch[1], 10);
 
-      const priceMatch = line.match(/(?:unit\s*price|rate|@)?[:\s]*[$€£¥₹]?\s*([\d,]+\.\d{2})/i) || line.match(/[$€£¥₹]\s*([\d,]+\.?\d*)/);
+      const priceMatch = trimmed.match(/(?:unit\s*price|rate|@)?[:\s]*[$€£¥₹]?\s*([\d,]+\.\d{2})/i) || trimmed.match(/[$€£¥₹]\s*([\d,]+\.?\d*)/);
       if (priceMatch) unitPrice = parseFloat(priceMatch[1].replace(/,/g, ''));
 
-      const taxMatch = line.match(/tax[:\s]*(\d+(?:\.\d+)?)\s*%/i);
+      const taxMatch = trimmed.match(/tax[:\s]*(\d+(?:\.\d+)?)\s*%/i);
       if (taxMatch) taxRate = parseFloat(taxMatch[1]);
 
-      desc = line.replace(/^\d+[\.\-)]\s*/, '')
+      desc = trimmed.replace(/^\d+[\.\-)]\s*/, '')
         .replace(/^[•\-\*]\s*/, '')
         .split(/\||\(|@/)[0].trim();
-
-      if (desc && desc.length > 2 && !/^(total|subtotal|shipping|freight|charges)/i.test(desc)) {
-        items.push({
-          description: desc,
-          sku: sku || `ITM-${Math.floor(100 + Math.random() * 900)}`,
-          quantity: qty || 1,
-          unitPrice: unitPrice || 50.00,
-          taxRate: taxRate || 0.0
-        });
+    }
+    // Tabular or price row: e.g. "Item Name 2 45.00 90.00" or "Office Chair $250.00"
+    else if (/\d+/.test(trimmed)) {
+      const priceMatches = [...trimmed.matchAll(/[$€£¥₹]?\s*(\d{1,6}(?:,\d{3})*(?:\.\d{2}))/g)];
+      if (priceMatches.length > 0) {
+        const tokens = trimmed.split(/\s{2,}|\t|\|/).filter(t => t.trim());
+        if (tokens.length >= 2) {
+          desc = tokens[0].replace(/^\d+[\.\-)]\s*/, '').trim();
+          const numTokens = tokens.slice(1).map(t => parseFloat(t.replace(/[^0-9.]/g, ''))).filter(n => !isNaN(n));
+          if (numTokens.length === 1) {
+            unitPrice = numTokens[0];
+          } else if (numTokens.length >= 2) {
+            if (Number.isInteger(numTokens[0]) && numTokens[0] > 0 && numTokens[0] <= 1000) {
+              qty = numTokens[0];
+              unitPrice = numTokens[1];
+            } else {
+              unitPrice = numTokens[0];
+            }
+          }
+        } else {
+          const lastPrice = parseFloat(priceMatches[0][1].replace(/,/g, ''));
+          unitPrice = lastPrice;
+          const textBeforePrice = trimmed.substring(0, priceMatches[0].index).trim();
+          const trailingQtyMatch = textBeforePrice.match(/\b(\d+)\s*$/);
+          if (trailingQtyMatch && parseInt(trailingQtyMatch[1], 10) > 0 && parseInt(trailingQtyMatch[1], 10) <= 500) {
+            qty = parseInt(trailingQtyMatch[1], 10);
+            desc = textBeforePrice.substring(0, trailingQtyMatch.index).trim();
+          } else {
+            desc = textBeforePrice;
+          }
+          desc = desc.replace(/^\d+[\.\-)]\s*/, '').trim();
+        }
       }
+    }
+
+    desc = desc.replace(/^[•\-\*#\d\.\s]+/, '').replace(/[\s\-_|:]+$/, '').trim();
+
+    if (desc && desc.length >= 2 && unitPrice > 0 && !headerSkipRegex.test(desc)) {
+      items.push({
+        description: desc,
+        sku: sku || `ITM-${Math.floor(100 + Math.random() * 900)}`,
+        quantity: qty || 1,
+        unitPrice: unitPrice || 50.00,
+        taxRate: taxRate || 0.0
+      });
     }
   });
 
-  if (items.length === 0) {
-    items.push({
-      description: "Procurement Items / Deliverables",
-      sku: "GEN-001",
-      quantity: 1,
-      unitPrice: 500.00,
-      taxRate: 5.0
-    });
+  if (items.length === 0 && clean.trim().length > 0) {
+    const candidateLines = lines.map(l => l.trim()).filter(l => l.length > 5 && !headerSkipRegex.test(l));
+    if (candidateLines.length > 0) {
+      items.push({
+        description: candidateLines[0].substring(0, 80),
+        sku: "GEN-001",
+        quantity: 1,
+        unitPrice: 100.00,
+        taxRate: 5.0
+      });
+    } else {
+      items.push({
+        description: "Procurement Items / Deliverables",
+        sku: "GEN-001",
+        quantity: 1,
+        unitPrice: 100.00,
+        taxRate: 5.0
+      });
+    }
   }
 
   return {
@@ -675,6 +731,13 @@ app.post('/api/extract-po', async (req, res) => {
 
   // 1. If explicit local parser mode requested or no AI keys configured
   if (parserMode === 'local' || (!geminiKey && !groq)) {
+    if (images && images.length > 0 && !rawText.trim()) {
+      return res.status(422).json({
+        success: false,
+        requiresOcr: true,
+        error: 'No server-side AI Vision key is configured on Vercel to directly parse images. Running client OCR...'
+      });
+    }
     const localResult = parseWithLocalHeuristics(rawText);
     return res.json({
       success: true,
@@ -813,13 +876,23 @@ ${rawText || "Please inspect the attached PO image(s)."}
           const result = await resp.json();
           const jsonText = result.candidates?.[0]?.content?.parts?.[0]?.text;
           if (jsonText) {
-            const parsedData = JSON.parse(jsonText);
-            return res.json({
-              success: true,
-              provider: 'gemini',
-              model: cleanModel,
-              data: parsedData
-            });
+            let parsedData = null;
+            try {
+              parsedData = JSON.parse(jsonText);
+            } catch (pErr) {
+              const match = jsonText.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || jsonText.match(/(\{[\s\S]*\})/);
+              if (match) {
+                try { parsedData = JSON.parse(match[1]); } catch (e) {}
+              }
+            }
+            if (parsedData && Array.isArray(parsedData.items) && parsedData.items.length > 0) {
+              return res.json({
+                success: true,
+                provider: 'gemini',
+                model: cleanModel,
+                data: parsedData
+              });
+            }
           }
         } catch (mErr) {
           lastError = mErr;
@@ -827,6 +900,13 @@ ${rawText || "Please inspect the attached PO image(s)."}
       }
 
       console.warn('[Gemini Server] Vision extraction attempt failed, checking fallback:', lastError?.message);
+      if (images && images.length > 0 && !rawText.trim()) {
+        return res.status(502).json({
+          success: false,
+          requiresOcr: true,
+          error: lastError?.message || 'Gemini Vision extraction failed to extract items from images on server.'
+        });
+      }
     } catch (gErr) {
       console.error('[Gemini Server Error]:', gErr);
     }
