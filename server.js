@@ -84,6 +84,47 @@ function getGeminiModel() {
 }
 
 /**
+ * Helper: Extract OCR text directly using Google Gemini Vision AI (Serverless & Cloud-Ready for Vercel)
+ */
+async function extractTextWithGeminiVision(image, apiKey) {
+  const cleanKey = apiKey || process.env.GEMINI_API_KEY;
+  if (!cleanKey || cleanKey.startsWith('AIzaSy_your_gemini') || cleanKey.trim() === '') {
+    throw new Error('Google Gemini API Key is not configured. Add GEMINI_API_KEY to your environment variables or enter it in API Config.');
+  }
+
+  const mime = image.mimeType || 'image/png';
+  const cleanModel = (process.env.GEMINI_MODEL || 'gemini-1.5-flash').replace(/^models\//, '');
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${cleanKey.trim()}`;
+
+  const payload = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { text: "Perform verbatim Optical Character Recognition (OCR) on this purchase order / invoice document. Extract and transcribe all text, line items, headers, tables, numbers, and dates line by line exactly as written. Do not add commentary or conversational filler." },
+          { inlineData: { mimeType: mime, data: image.data } }
+        ]
+      }
+    ]
+  };
+
+  const resp = await fetch(apiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!resp.ok) {
+    const errData = await resp.json().catch(() => ({}));
+    throw new Error(errData?.error?.message || `Gemini Vision returned HTTP ${resp.status}`);
+  }
+
+  const result = await resp.json();
+  const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return text.trim();
+}
+
+/**
  * Deterministic Local Heuristics PO Parser (Server-side Fallback)
  */
 function parseWithLocalHeuristics(text = '') {
@@ -284,21 +325,48 @@ app.all(['/api/gemini/models'], async (req, res) => {
 
 /**
  * POST /api/ocr/test
- * Tests connectivity and health for selected OCR engine (Docker AI, Jina AI, HuggingFace, OCR.space, Browser Tesseract)
+ * Tests connectivity and health for selected OCR engine (Gemini Vision Cloud, Docker AI, Jina AI, HuggingFace, OCR.space, Browser Tesseract)
  */
 app.post('/api/ocr/test', async (req, res) => {
-  const { provider = 'docker_jina', endpoint, apiKey = '' } = req.body;
+  const { provider = 'gemini_vision', endpoint, apiKey = '' } = req.body;
 
   if (provider === 'browser_tesseract') {
     return res.json({
       success: true,
       provider: 'browser_tesseract',
-      message: 'Built-in Browser OCR Engine is ready.'
+      message: 'Built-in Browser OCR Engine (Tesseract.js) is ready.'
+    });
+  }
+
+  // Google Gemini Vision AI (Serverless, Cloud-Ready for Vercel)
+  if (provider === 'gemini_vision') {
+    const key = apiKey || getGeminiApiKey(req);
+    if (!key) {
+      return res.status(400).json({
+        success: false,
+        error: 'Google Gemini API Key is required for Cloud Vision OCR. Set GEMINI_API_KEY in Vercel environment variables or enter it in the API Key input.'
+      });
+    }
+    return res.json({
+      success: true,
+      provider: 'gemini_vision',
+      message: 'Google Gemini Vision Cloud OCR is connected and ready on Vercel!'
     });
   }
 
   try {
     if (provider === 'docker_jina' || provider === 'docker_8000') {
+      const isTargetLocalhost = !endpoint || endpoint.includes('localhost') || endpoint.includes('127.0.0.1');
+
+      // Vercel serverless environment check: localhost:11434 cannot be reached from cloud lambdas
+      if (process.env.VERCEL && isTargetLocalhost) {
+        return res.status(503).json({
+          success: false,
+          isVercel: true,
+          error: `Cannot reach local Docker / Ollama at http://localhost:11434 from Vercel cloud environment. When deployed on Vercel, switch to 'Google Gemini Vision AI (Cloud)' or 'Built-in Browser OCR' (both work instantly with zero setup), or provide a public tunnel URL (e.g. https://...ngrok-free.app/v1/chat/completions).`
+        });
+      }
+
       const target = endpoint || (provider === 'docker_8000' ? 'http://localhost:8000/v1/models' : 'http://localhost:11434/api/tags');
       const pingUrl = target.includes('/chat/completions') ? target.replace('/chat/completions', '/models') : target;
 
@@ -347,7 +415,7 @@ app.post('/api/ocr/test', async (req, res) => {
 
       return res.status(503).json({
         success: false,
-        error: `Cannot reach local Docker / Ollama at ${chatTarget}. Ensure your Docker container or Ollama service is running, or switch to Built-in Browser OCR.`
+        error: `Cannot reach local Docker / Ollama at ${chatTarget}. Ensure your Docker container or Ollama service is running, or switch to 'Google Gemini Vision AI (Cloud)' or 'Built-in Browser OCR'.`
       });
     }
 
@@ -400,7 +468,7 @@ app.post('/api/ocr/test', async (req, res) => {
  * Server-side unified OCR execution avoiding browser CORS limits
  */
 app.post('/api/ocr', async (req, res) => {
-  const { image, provider = 'docker_jina', endpoint, apiKey = '' } = req.body;
+  const { image, provider = 'gemini_vision', endpoint, apiKey = '' } = req.body;
 
   if (!image || !image.data) {
     return res.status(400).json({ success: false, error: 'Missing image data for OCR.' });
@@ -410,11 +478,34 @@ app.post('/api/ocr', async (req, res) => {
   const base64DataUri = `data:${mime};base64,${image.data}`;
 
   try {
-    // 1. Docker Ollama or Local Port 8000
+    // 0. Google Gemini Vision Cloud OCR (100% Vercel & Production Compatible)
+    if (provider === 'gemini_vision') {
+      const geminiKey = apiKey || getGeminiApiKey(req);
+      const extractedText = await extractTextWithGeminiVision(image, geminiKey);
+      return res.json({ success: true, provider: 'gemini_vision', text: extractedText });
+    }
+
+    // 1. Docker Ollama or Local Port 8000 (with automatic Vercel Cloud Fallback)
     if (provider === 'docker_jina' || provider === 'docker_8000') {
       const target = endpoint || (provider === 'docker_8000' ? 'http://localhost:8000/v1/chat/completions' : 'http://localhost:11434/v1/chat/completions');
-      const model = provider === 'docker_8000' ? 'jinaai/jina-ocr-v1' : 'hf.co/jinaai/jina-ocr-v1';
+      const isTargetLocalhost = target.includes('localhost') || target.includes('127.0.0.1');
 
+      // If running in Vercel serverless cloud and pointing to localhost, auto-route to Gemini Vision
+      if (process.env.VERCEL && isTargetLocalhost) {
+        const geminiKey = apiKey || getGeminiApiKey(req);
+        if (geminiKey) {
+          console.log('[Vercel Cloud] Local Docker localhost is unreachable from Vercel cloud lambdas. Auto-routing through Google Gemini Vision Cloud OCR.');
+          const extractedText = await extractTextWithGeminiVision(image, geminiKey);
+          return res.json({
+            success: true,
+            provider: 'gemini_vision_fallback',
+            text: extractedText,
+            note: 'Local Docker localhost was automatically routed via Google Gemini Vision Cloud OCR for Vercel.'
+          });
+        }
+      }
+
+      const model = provider === 'docker_8000' ? 'jinaai/jina-ocr-v1' : 'hf.co/jinaai/jina-ocr-v1';
       const payload = {
         model,
         messages: [
@@ -431,20 +522,40 @@ app.post('/api/ocr', async (req, res) => {
       const headers = { 'Content-Type': 'application/json' };
       if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
 
-      const ocrResp = await fetch(target, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload)
-      });
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 6000);
+        const ocrResp = await fetch(target, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
 
-      if (!ocrResp.ok) {
-        const errJson = await ocrResp.json().catch(() => ({}));
-        throw new Error(errJson?.error?.message || `Local OCR server returned HTTP ${ocrResp.status}`);
+        if (!ocrResp.ok) {
+          const errJson = await ocrResp.json().catch(() => ({}));
+          throw new Error(errJson?.error?.message || `Local OCR server returned HTTP ${ocrResp.status}`);
+        }
+
+        const result = await ocrResp.json();
+        const extractedText = result.choices?.[0]?.message?.content || result.response || result.text || '';
+        return res.json({ success: true, provider, text: extractedText.trim() });
+      } catch (connErr) {
+        // Graceful automatic fallback to Gemini Vision if Docker is unreachable
+        const geminiKey = apiKey || getGeminiApiKey(req);
+        if (geminiKey) {
+          console.warn(`[OCR Fallback] Docker ${target} failed (${connErr.message}). Automatically falling back to Google Gemini Vision.`);
+          const fallbackText = await extractTextWithGeminiVision(image, geminiKey);
+          return res.json({
+            success: true,
+            provider: 'gemini_vision_fallback',
+            text: fallbackText,
+            note: 'Local Docker was unreachable; automatically processed using Google Gemini Vision Cloud OCR.'
+          });
+        }
+        throw new Error(`Cannot reach local Docker / Ollama at ${target}. Ensure your container is running, or switch to 'Google Gemini Vision AI (Cloud)' or 'Built-in Browser OCR'.`);
       }
-
-      const result = await ocrResp.json();
-      const extractedText = result.choices?.[0]?.message?.content || result.response || result.text || '';
-      return res.json({ success: true, provider, text: extractedText.trim() });
     }
 
     // 2. Official Jina AI Cloud

@@ -552,16 +552,15 @@
               <label class="block text-[11px] font-semibold text-slate-600 mb-1">OCR Model / Provider</label>
               <select id="ocrProviderSelect"
                 class="w-full text-xs bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-brand-500 font-medium cursor-pointer">
-                <option value="browser_tesseract" selected>Built-in Browser OCR (Tesseract.js - Free &amp; Offline)
-                </option>
-                <option value="docker_jina">Docker AI / Ollama Jina OCR (http://localhost:11434/...)</option>
-                <option value="docker_8000">Docker Local vLLM (http://localhost:8000/...)</option>
-                <option value="jina_cloud">Official Jina AI Cloud (https://api.jina.ai/...)</option>
-                <option value="hf_jina">HuggingFace Inference (https://router.huggingface.co/...)</option>
-                <option value="ocrspace">OCR.space Cloud API (https://api.ocr.space/...)</option>
+                <option value="gemini_vision" selected>⚡ Google Gemini Vision AI (Cloud - Recommended for Vercel)</option>
+                <option value="browser_tesseract">🌐 Built-in Browser OCR (Tesseract.js - Free &amp; Offline)</option>
+                <option value="docker_jina">🐳 Docker AI / Ollama Jina OCR (Local / ngrok Tunnel)</option>
+                <option value="docker_8000">🐳 Docker Local vLLM (Port 8000 / Remote)</option>
+                <option value="jina_cloud">☁️ Official Jina AI Cloud (api.jina.ai)</option>
+                <option value="hf_jina">🤗 HuggingFace Inference API</option>
+                <option value="ocrspace">📄 OCR.space Cloud API (Free)</option>
               </select>
-              <p id="ocrProviderHint" class="text-[10px] text-slate-500 mt-1">⚡ Zero-setup offline OCR using WebAssembly
-                right in your browser.</p>
+              <p id="ocrProviderHint" class="text-[10px] text-slate-500 mt-1">⚡ Recommended for Vercel: High-accuracy cloud vision OCR powered by Google Gemini 1.5 Flash.</p>
             </div>
             <div>
               <label class="block text-[11px] font-semibold text-slate-600 mb-1">OCR Endpoint URL</label>
@@ -811,8 +810,16 @@ No Shipping fees.`,
     let poHistory = [];
     let customApiKey = localStorage.getItem('gemini_user_api_key') || '';
     let customOcrApiKey = localStorage.getItem('ocr_user_api_key') || '';
-    let customOcrProvider = localStorage.getItem('ocr_provider') || 'browser_tesseract';
+    let customOcrProvider = localStorage.getItem('ocr_provider') || 'gemini_vision';
     let customOcrEndpoint = localStorage.getItem('ocr_endpoint') || '';
+
+    // Auto-migrate on cloud hosts (e.g. Vercel) if set to unreachable local Docker localhost
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      if (customOcrProvider === 'docker_jina' && (!customOcrEndpoint || customOcrEndpoint.includes('localhost'))) {
+        customOcrProvider = 'gemini_vision';
+        localStorage.setItem('ocr_provider', 'gemini_vision');
+      }
+    }
 
     // Auto-purge any deprecated, decommissioned, or legacy model names from browser cache
     const currentCachedModel = localStorage.getItem('gemini_model');
@@ -1393,7 +1400,34 @@ ${rawText || "Please inspect the attached PO image(s)."}
       const prov = provider || localStorage.getItem('ocr_provider') || 'browser_tesseract';
       let endpoint = endpointUrl || localStorage.getItem('ocr_endpoint');
 
-      // 1. Built-in In-Browser Tesseract.js (Client-side, 100% Free & Offline)
+      // 1. Google Gemini Vision Cloud OCR (100% Vercel Serverless Ready)
+      if (prov === 'gemini_vision') {
+        try {
+          const reqHeaders = { 'Content-Type': 'application/json' };
+          if (customApiKey) reqHeaders['x-gemini-api-key'] = customApiKey;
+
+          const res = await fetch('/api/ocr', {
+            method: 'POST',
+            headers: reqHeaders,
+            body: JSON.stringify({
+              image: base64ImageData,
+              provider: 'gemini_vision',
+              apiKey: customApiKey || apiKey
+            })
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.success && data.text) {
+              return data.text.trim();
+            }
+          }
+        } catch (gErr) {
+          console.warn("Gemini Vision Cloud OCR failed:", gErr.message);
+        }
+      }
+
+      // 2. Built-in In-Browser Tesseract.js (Client-side, 100% Free & Offline)
       if (prov === 'browser_tesseract') {
         if (typeof Tesseract !== 'undefined') {
           try {
@@ -1407,16 +1441,19 @@ ${rawText || "Please inspect the attached PO image(s)."}
         }
       }
 
-      // 2. Try Server-side OCR Proxy (Avoids Browser CORS blocks)
+      // 3. Try Server-side OCR Proxy (Avoids Browser CORS blocks, auto-falls back to Gemini on Vercel)
       try {
+        const reqHeaders = { 'Content-Type': 'application/json' };
+        if (customApiKey) reqHeaders['x-gemini-api-key'] = customApiKey;
+
         const res = await fetch('/api/ocr', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: reqHeaders,
           body: JSON.stringify({
             image: base64ImageData,
             provider: prov,
             endpoint: endpoint,
-            apiKey: apiKey
+            apiKey: apiKey || customApiKey
           })
         });
 
@@ -1714,7 +1751,12 @@ ${rawText || "Please inspect the attached PO image(s)."}
         const keyInput = document.getElementById('customOcrApiKeyInput');
         const hintEl = document.getElementById('ocrProviderHint');
 
-        if (prov === 'browser_tesseract') {
+        if (prov === 'gemini_vision') {
+          endpointInput.value = 'Cloud API (Direct Serverless on Vercel)';
+          endpointInput.disabled = true;
+          keyInput.placeholder = 'Uses your Gemini API key (from .env or header)';
+          if (hintEl) hintEl.textContent = '⚡ Recommended for Vercel: High-accuracy serverless OCR powered by Google Gemini 1.5 Flash.';
+        } else if (prov === 'browser_tesseract') {
           endpointInput.value = 'Client-side WebAssembly (No endpoint required)';
           endpointInput.disabled = true;
           keyInput.placeholder = 'None needed (Free & 100% offline)';
@@ -1723,7 +1765,7 @@ ${rawText || "Please inspect the attached PO image(s)."}
           endpointInput.disabled = false;
           endpointInput.value = 'http://localhost:11434/v1/chat/completions';
           keyInput.placeholder = 'Optional (or Ollama auth token)';
-          if (hintEl) hintEl.textContent = 'Runs local Ollama / Docker AI with jina-ocr-v1 vision model.';
+          if (hintEl) hintEl.textContent = '🐳 Local Ollama. Note: On Vercel cloud, requires a public tunnel (e.g. ngrok), or switch to Gemini Vision / Browser OCR.';
         } else if (prov === 'docker_8000') {
           endpointInput.disabled = false;
           endpointInput.value = 'http://localhost:8000/v1/chat/completions';
@@ -1747,10 +1789,10 @@ ${rawText || "Please inspect the attached PO image(s)."}
         }
       };
 
-      const initialProv = customOcrProvider || 'browser_tesseract';
+      const initialProv = customOcrProvider || 'gemini_vision';
       document.getElementById('ocrProviderSelect').value = initialProv;
       updateOcrInputs(initialProv);
-      if (customOcrEndpoint && initialProv !== 'browser_tesseract') {
+      if (customOcrEndpoint && initialProv !== 'browser_tesseract' && initialProv !== 'gemini_vision') {
         document.getElementById('customOcrEndpointInput').value = customOcrEndpoint;
       }
 
@@ -2321,14 +2363,18 @@ ${rawText || "Please inspect the attached PO image(s)."}
         }
 
         try {
+          const reqHeaders = { 'Content-Type': 'application/json' };
+          const geminiVal = document.getElementById('customApiKeyInput')?.value.trim() || customApiKey;
+          if (geminiVal) reqHeaders['x-gemini-api-key'] = geminiVal;
+
           // Call Server OCR test endpoint to avoid browser CORS blocks
           const res = await fetch('/api/ocr/test', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: reqHeaders,
             body: JSON.stringify({
               provider: prov,
               endpoint: endpoint,
-              apiKey: key
+              apiKey: prov === 'gemini_vision' ? (key || geminiVal) : key
             })
           });
 
@@ -2340,6 +2386,9 @@ ${rawText || "Please inspect the attached PO image(s)."}
           } else {
             statusMsg.textContent = `Error: ${data.error || `HTTP ${res.status}`}`;
             statusMsg.className = "text-[11px] text-rose-600";
+            if (data.isVercel || (data.error && data.error.includes('Vercel'))) {
+              showToast("Tip: Switch to 'Google Gemini Vision AI (Cloud)' for instant Vercel cloud OCR.", "info");
+            }
           }
         } catch (err) {
           console.warn("OCR test failed:", err);
